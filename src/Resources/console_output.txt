@@ -1,0 +1,53 @@
+Image shape: torch.Size([256, 160]). Labeled image shape: torch.Size([256, 160])
+Image data type: torch.float32
+
+Encoding block: Models.FCnnModel
+---------
+Shape after CDB: torch.Size([1, 64, 256, 160]).
+Shape after maxpool: torch.Size([1, 64, 128, 80])
+
+Encoding block: Models.FCnnModel
+---------
+Shape after CDB: torch.Size([1, 64, 128, 80]).
+Shape after maxpool: torch.Size([1, 64, 64, 40])
+
+Encoding block: Models.FCnnModel
+---------
+Shape after CDB: torch.Size([1, 64, 64, 40]).
+Shape after maxpool: torch.Size([1, 64, 32, 20])
+
+Encoding block: Models.FCnnModel
+---------
+Shape after CDB: torch.Size([1, 64, 32, 20]).
+Shape after maxpool: torch.Size([1, 64, 16, 10])
+
+CDB block
+-------
+Output shape after the first sequence (BN/PReLU + Conv + BN) -> Maxout: torch.Size([1, 64, 16, 10])
+Output shape after the second sequence (PReLU + Conv + BN) -> Maxout: torch.Size([1, 64, 16, 10])
+Output shape after the third sequence (PReLU + Conv + BN): torch.Size([1, 64, 16, 10])
+
+Decoding block: Models.FCnnModel
+---------
+Shape after unpool: torch.Size([1, 64, 32, 20]).
+Shape after maxout: torch.Size([1, 64, 32, 20]).
+Shape after CDB: torch.Size([1, 64, 32, 20])
+
+Decoding block: Models.FCnnModel
+---------
+Shape after unpool: torch.Size([1, 64, 64, 40]).
+Shape after maxout: torch.Size([1, 64, 64, 40]).
+Shape after CDB: torch.Size([1, 64, 64, 40])
+
+Decoding block: Models.FCnnModel
+---------
+Shape after unpool: torch.Size([1, 64, 128, 80]).
+Shape after maxout: torch.Size([1, 64, 128, 80]).
+Shape after CDB: torch.Size([1, 64, 128, 80])
+
+Decoding block: Models.FCnnModel
+---------
+Shape after unpool: torch.Size([1, 64, 256, 160]).
+Shape after maxout: torch.Size([1, 64, 256, 160]).
+Shape after CDB: torch.Size([1, 64, 256, 160])
+torch.Size([1, 79, 256, 160])
