@@ -1,0 +1,31 @@
+{
+  "exp_name": "experiment_name",
+  "exp_path": "./experiments",
+  "about_experiment": "Details about the performed experiment",
+
+  "data_path": "./dataset/",
+  "train_size": 0.70,
+  "valid_size": 0.15,
+  "test_size": 0.15,
+
+  "plane": "coronal",
+
+  "lr": 0.0005,
+  "lr_sch_step": 10,
+  "lr_sch_gamma": 0.5,
+  "weight_decay": 0.00001,
+  "batch_size": 16,
+
+  "normalize_input": true,
+
+  "loss_function": "dice_loss_&_cross_entropy",
+
+  "train_epochs": 50,
+  "eval_net_epoch": 1,
+  "save_net_epochs": 30,
+
+  "lut_path": "./config/FastSurfer_ColorLUT.tsv",
+
+  "print_loss": 20,
+  "resume_training": false
+}

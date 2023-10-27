@@ -194,11 +194,13 @@ class ClassifierBlock(nn.Module):
                                 kernel_size=kernel_size,
                                 stride=stride)
 
+        self.softmax = nn.Softmax(dim=1)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Returns the prediction logits
+        Returns the prediction probs
         """
-        return self.conv2d(x)
+        return self.softmax(self.conv2d(x))
 
 
 # Define the F-CNN architecture
@@ -253,12 +255,10 @@ class FCnnModel(nn.Module):
         """
         for module in self.modules():
             if isinstance(module, nn.Conv2d):
-                nn.init.kaiming_normal_(module.weight)
+                # Xavier uniform: https://pytorch.org/docs/stable/nn.init.html#torch.nn.init.xavier_uniform_
+                nn.init.xavier_uniform_(module.weight)
                 if module.bias is not None:
-                    nn.init.constant_(module.bias, 0)
-            # elif isinstance(module, nn.PReLU):
-            #     nn.init.constant_(module.weight, 0.02)  # Customizable value
-            #     nn.init.constant_(module.bias, 0)
+                    nn.init.constant_(module.bias, 0.00001)
             elif isinstance(module, nn.BatchNorm2d):
                 nn.init.constant_(module.weight, 1)  # Initialize scale to 1
                 nn.init.constant_(module.bias, 0)  # Initialize shift to 0

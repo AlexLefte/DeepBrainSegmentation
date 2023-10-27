@@ -1,0 +1,4 @@
+tensor([0.0000e+00, 1.0000e+00, 2.0000e+00,  ..., 2.9020e+03, 2.9940e+03,
+        3.0310e+03], device='cuda:0')
+Image shape: torch.Size([256, 160]). Labeled image shape: torch.Size([256, 160])
+Image data type: torch.float32
