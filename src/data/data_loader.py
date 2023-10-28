@@ -7,8 +7,7 @@ from torch.utils.data import DataLoader
 def get_data_loader(cfg,
                     data_path: str,
                     batch_size: int,
-                    mode: str,
-                    shuffle: bool = False):
+                    mode: str):
     """
     Creates a PyTorch data using the subjects' custom dataset
 
@@ -30,6 +29,8 @@ def get_data_loader(cfg,
     -------
     data_loader: torch.utils.data
     """
+
+    # For transforms, also check : https://torchio.readthedocs.io/transforms/augmentation.html
 
     if mode == 'train':
         # Create a transform

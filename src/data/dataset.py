@@ -55,9 +55,9 @@ class SubjectsDataset(Dataset):
 
         # Load the data
         start_time = time.time()
-        for idx, subject in enumerate(self.subjects):
+        for subject in self.subjects:
             # Get subject path
-            subject_path = os.path.join(self.data_path, self.subjects[idx])
+            subject_path = os.path.join(self.data_path, subject)
 
             # Extract: orig (original images), orig_labels (annotations according to the
             # FreeSurfer convention), zooms (voxel dimensions)
@@ -82,7 +82,7 @@ class SubjectsDataset(Dataset):
             # Get the unique values in the label matrix
             unique_classes, count = np.unique(label, return_counts=True)
 
-            for index, uc in enumerate(unique_classes):
+            for uc in unique_classes:
                 if uc in self.weights.keys():
                     self.weights[uc] += count
                 else:
@@ -111,8 +111,10 @@ class SubjectsDataset(Dataset):
         """
         image, labels = self.images[idx], self.labels[idx]
 
+        # TODO: transformare log
         # Normalize the image in the [0, 1] range
-        img = np.clip(image / np.max(image), 0.0, 1.0)
+        for slice in np.shape(image, 0):
+            image[slice, :, :] = (image[slice, :, :] - np.amin(image[slice, :, :])) / (np.amax(image[slice]) - np.amin(image[slice]))
 
         # Apply transforms if they exist
         if self.transform:
