@@ -21,15 +21,20 @@ if __name__ == '__main__':
     # sys.stdout = file  # Redirect standard output to the file
 
     # Initialize config
-    cfg = json.load(open('./config.json', 'r'))
+    # Get the current directory of the script
+    current_dir = os.path.dirname(__file__)
+    # Construct the path to the parent directory
+    parent_dir = os.path.dirname(current_dir)
+    cfg = json.load(open(parent_dir + '/config/config.json', 'r'))
 
     # Data path
     DATA_PATH = cfg['data_path']
     EXPERIMENT = cfg['exp_name']
+    BATCH_SIZE = cfg['batch_size']
     LOG_PATH = os.path.join(cfg['exp_path'], "log", EXPERIMENT + ".log")
 
     # Setup logger
-    logger.create_logger(os.path.join(cfg))
+    logger.create_logger(LOG_PATH)
 
     # Initialize CUDA
     torch.cuda.init()
@@ -40,7 +45,9 @@ if __name__ == '__main__':
 
     # Initializing some training data
     # We don't need for now the data
-    train_data = SubjectsDataset(DATA_PATH)
+    train_data = SubjectsDataset(cfg=cfg,
+                                 path=DATA_PATH,
+                                 mode='train')
 
     # Define some parameters
     # params = {
@@ -58,13 +65,13 @@ if __name__ == '__main__':
     # }
 
     # Test the DataLoaders:
-    train_data_loader = loader.get_data_loader(cfg=cfg,
-                                               data_path=DATA_PATH,
-                                               batch_size=BATCH_SIZE,
-                                               mode='train')
+    # train_data_loader = loader.get_data_loader(cfg=cfg,
+    #                                            data_path=DATA_PATH,
+    #                                            batch_size=BATCH_SIZE,
+    #                                            mode='train')
 
     # Initialize our model
-    model = FCnnModel(params=cfg).to(device)
+    # model = FCnnModel(params=cfg).to(device)
 
     # Select one slice from our training set
     # mri, labeled_mri = train_data.__getitem__(0)

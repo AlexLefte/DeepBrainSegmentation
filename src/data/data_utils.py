@@ -5,6 +5,7 @@ import time
 import nibabel as nib
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import os
 from torchvision import transforms
 
@@ -37,14 +38,17 @@ from torchvision import transforms
 
 def get_labels(labels: np.ndarray,
                lut_labels: list,
-               lut_labels_sag: list,
                right_left_map: dict,
                plane: str,) -> np.ndarray:
     """
     Returns the labels in range: 0-95
     """
     # Process the labels: unknown => background
-    labels[labels not in lut_labels] = 0
+    # labels[labels not in lut_labels] = 0
+    # labels = np.where(labels not in lut_labels, 0, labels)
+    mask = ~np.isin(labels, lut_labels)
+    # Use the mask to replace elements with 0
+    labels[mask] = 0
 
     # Ensure there are no labels other than those listed in the lookup table
     assert all(item in labels for item in lut_labels), "Error: there are segmentation labels not listed in the LUT."
@@ -68,7 +72,7 @@ def get_labels(labels: np.ndarray,
             labels[labels == left] = right
 
         # Create a new LUT for the sagittal labels
-        lut_labels_sag = {value: index for index, value in enumerate(lut_labels_sag)}
+        lut_labels_sag = {value: index for index, value in enumerate(lut_labels)}
         # Convert the original labels according to this LUT
         new_labels = np.vectorize(lut_labels_sag.get)(labels)
         return new_labels
@@ -97,14 +101,16 @@ def get_right_left_dict(lut: pd.DataFrame) -> dict:
     right_left_dict = {}
 
     # Iterate through each structure of the dataframe
-    for idx, name in lut[["ID", "Name"]]:
+    for idx, name in zip(lut["ID"], lut["LabelName"]):
         if name.startswith("Right-"):
             # Get the name of the corresponding structure on left
-            left_structure = "Left-" + name[5:]
+            left_structure = "Left-" + name[6:]
 
-            if left_structure in lut['Names'].values():
+            names = lut['LabelName']
+
+            if lut['LabelName'].str.contains(left_structure).any():
                 # Find the index of the right structure
-                right_idx = [k for k, v in lut['ID', 'Name'] if v == left_structure][0]
+                right_idx = [k for k, v in zip(lut["ID"], lut["LabelName"]) if v == left_structure][0]
 
                 # Add the mapping to the left_to_right_map dictionary
                 right_left_dict[idx] = right_idx
@@ -137,4 +143,39 @@ def get_sagittal_labels_from_lut(lut: pd.DataFrame) -> list:
     """
     return [lut["ID"][index] for index, name in enumerate(lut["Name"]) \
             if not name.startswith("Left-") and not name.startswith("ctx-lh")]
+
+
+# Data vizualization ###
+def compare_intensity_across_dataset(subjects: list,
+                                     subjects_names: list):
+    # Initialize lists to store intensity statistics for each subject
+    mean_intensity_values = []
+    std_intensity_values = []
+
+    # Calculate and compare intensity statistics for each subject and ROI
+    for subject_data in subjects:
+        # Print shapes
+        print(subject_data.shape)
+
+        # Calculate statistics
+        mean_intensity = np.mean(subject_data)
+        std_intensity = np.std(subject_data)
+
+        # Append statistics to the lists
+        mean_intensity_values.append(mean_intensity)
+        std_intensity_values.append(std_intensity)
+
+    print(mean_intensity_values)
+    print(std_intensity_values)
+
+    # Visualize and compare intensity values using plots or other methods
+    plt.figure(figsize=(10, 5))
+    plt.bar(subjects_names, mean_intensity_values, label='Mean Intensity')
+    plt.bar(subjects_names, std_intensity_values, label='Std Intensity')
+    plt.xlabel('Subjects')
+    plt.ylabel('Intensity')
+    plt.legend()
+    plt.title('Comparison of MRI Intensity Across Subjects')
+    plt.show()
+#####################
 

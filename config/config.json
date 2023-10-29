@@ -3,7 +3,7 @@
   "exp_path": "./experiments",
   "about_experiment": "Details about the performed experiment",
 
-  "data_path": "./dataset/",
+  "data_path": "D:\\MyProjects\\DeepBrainSegmentation\\dataset",
   "train_size": 0.70,
   "valid_size": 0.15,
   "test_size": 0.15,
@@ -24,7 +24,7 @@
   "eval_net_epoch": 1,
   "save_net_epochs": 30,
 
-  "lut_path": "./config/FastSurfer_ColorLUT.tsv",
+  "lut_path": "D:\\MyProjects\\DeepBrainSegmentation\\config\\FastSurfer_ColorLUT.tsv",
 
   "print_loss": 20,
   "resume_training": false
