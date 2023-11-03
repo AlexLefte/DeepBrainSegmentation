@@ -6,6 +6,8 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import torchio as tio
+import nibabel.orientations as orientations
 import os
 from torchvision import transforms
 
@@ -171,11 +173,139 @@ def compare_intensity_across_dataset(subjects: list,
     # Visualize and compare intensity values using plots or other methods
     plt.figure(figsize=(10, 5))
     plt.bar(subjects_names, mean_intensity_values, label='Mean Intensity')
+    plt.xlabel('Subjects')
+    plt.ylabel('Mean Intensity')
+    plt.legend()
+    plt.title('Comparison of MRI Mean Intensity Across Subjects')
+    plt.show()
+
+    plt.figure(figsize=(10, 5))
     plt.bar(subjects_names, std_intensity_values, label='Std Intensity')
     plt.xlabel('Subjects')
-    plt.ylabel('Intensity')
+    plt.ylabel('Std')
     plt.legend()
-    plt.title('Comparison of MRI Intensity Across Subjects')
+    plt.title('Comparison of MRI Standard Deviation Across Subjects')
     plt.show()
 #####################
+
+
+# Data Preprocessing
+def crop_or_pad(image: np.ndarray, target_shape: list) -> np.ndarray:
+    # Get the current shape of the data
+    current_shape = list(image.shape)
+
+    # Initialize padding values to zero
+    padding = [(0, 0), (0, 0), (0, 0)]
+
+    # Check if cropping or padding is needed in each dimension
+    for i in range(len(current_shape)):
+        if current_shape[i] < target_shape[i]:
+            # If the current dimension is smaller than the target, add padding
+            padding[i] = (0, target_shape[i] - current_shape[i])
+        elif current_shape[i] > target_shape[i]:
+            # If the current dimension is larger than the target, crop the data
+            crop_amount = current_shape[i] - target_shape[i]
+            # Calculate how much to crop from each side
+            crop_start = crop_amount // 2
+            crop_end = crop_amount - crop_start
+            # Update the padding for this dimension
+            padding[i] = (crop_start, crop_end)
+
+    # Pad or crop the original data
+    padded_data = np.pad(image, padding, mode='constant', constant_values=0)
+    return padded_data
+
+
+def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
+    """
+    Permutes the axis depending on the plane
+    """
+    # Specify the orientation that matches the desired anatomical orientation (e.g., RAS)
+    desired_orientation = orientations.axcodes2ornt('RAS')
+
+    # Apply the orientation to the image data
+    img = nib.orientations.apply_orientation(img, desired_orientation)
+    # zooms = nib.orientations.apply_orientation(zooms, desired_orientation)
+    # labels = nib.orientations.apply_orientation(labels, desired_orientation)
+
+    if plane == 'axial':
+        img = np.moveaxis(img, [0, 1, 2], [1, 0, 2])
+        # labels = np.moveaxis(labels, [0, 1, 2], [1, 2, 0])
+        # weights = np.moveaxis(weights, [0, 1, 2], [1, 2, 0])
+    elif plane == 'sagittal':
+        img = np.moveaxis(img, [0, 1, 2], [2, 1, 0])
+        # labels = np.moveaxis(labels, [0, 1, 2], [2, 1, 0])
+        # weights = np.moveaxis(weights, [0, 1, 2], [2, 1, 0])
+    return img, zooms, labels
+
+
+def preprocess(image: np.ndarray, padding: int, mode: str) -> np.ndarray:
+    """
+    Performs preprocessing.
+    There are several methods to preprocess the study:
+    1) Crop or pad:
+        - Set a standard input size.
+        - If data shape is above the standard size => crop
+        - If data shape is below the standard size => pad
+    2) Normalization:
+        * Intensity rescaling:
+            - Use percentiles (e.g: (0.5, 99.5)).
+            - Usually applied for CT scans
+            - See U-net paper:  https://arxiv.org/pdf/1809.10486.pdf
+        * Z-Score Normalization (in fact Standardization):
+            - Can be applied after intensity rescaling
+            - Can be applied after intensity rescaling
+            - z = (x - mean) / std
+        * Log normalization
+            - Another approach would be to log the data and rescale using percentiles
+
+    Attributes
+    ----------
+    image
+        Unprocessed image as numpy.ndarray
+    padding
+        Padded input size to ensure the consistency
+    mode
+        Preprocessing mode:
+        1) "percentiles_&_zscore"
+        2) "log_norm_&_zscore"    """
+    # 1) Crop or pad
+    image = crop_or_pad(image, padding)
+    #############
+
+    # 2) Normalization using the torchio pipeline
+    # Create transforms list
+    transforms_list = []
+
+    if mode == 'percentiles_&_zscore':
+        # Append the RescaleIntensity and ZNormalization transforms
+        transforms_list.append(tio.RescaleIntensity(percentiles=(0.5, 99.5)))
+        transforms_list.append(tio.ZNormalization())
+    elif mode == 'log_norm_&_zscore':
+        # Append the ZNormalization transform
+        transforms_list.append(tio.ZNormalization())
+        # Apply log transform on the image
+        # Note: TorchhIO does not implement such scaling
+        image = np.log(image)
+    else:
+        # Wrong mode => return initial image
+        print("Invalid mode.")
+        return image
+
+    # Initializing the torchio.Subject instance.
+    # Create a subject
+    subject = tio.Subject()
+
+    # Create a TorchIO pipeline and add the transforms
+    pipeline = tio.Compose(transforms_list)
+
+    # Add the image to the subject
+    scalar_image = tio.ScalarImage(tensor=image)
+    subject.add_image(scalar_image, 'subject')
+
+    # Apply the pipeline to the subject
+    subject = pipeline(subject)
+
+    return subject['subject']
+####################
 

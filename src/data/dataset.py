@@ -1,8 +1,8 @@
 import logging
 import time
 
+import matplotlib.pyplot as plt
 import numpy as np
-import torch
 from torch.utils.data import Dataset
 import os
 import nibabel as nib
@@ -43,6 +43,12 @@ class SubjectsDataset(Dataset):
         # Get plane
         self.plane = cfg['plane']
 
+        # Get image processing modality:
+        self.processing_modality = cfg['preprocessing_modality']
+
+        # Get data padding:
+        self.data_padding = cfg['data_padding']
+
         # Lists for images, labels, label weights, and zooms
         self.images = []
         self.labels = []
@@ -59,6 +65,7 @@ class SubjectsDataset(Dataset):
 
         # Get start time and load the data
         start_time = time.time()
+        self.subjects = [self.subjects[1]]
         for subject in self.subjects:
             # Get subject path
             subject_path = os.path.join(self.data_path, subject)
@@ -75,6 +82,12 @@ class SubjectsDataset(Dataset):
                                        lut_labels=self.lut_labels,
                                        right_left_map=self.right_left_dict,
                                        plane=self.plane)
+
+            # Transform according to the current plane:
+            img_data, zooms, new_labels = du.fix_orientation(img_data,
+                                                             zooms,
+                                                             new_labels,
+                                                             self.plane)
 
             # Append the new subject to the dataset
             self.images.append(img_data)
@@ -103,9 +116,6 @@ class SubjectsDataset(Dataset):
         du.compare_intensity_across_dataset(self.images,
                                             self.subjects)
 
-        # Preprocessing the data
-        self.__preprocess()
-
         # Get stop time and display info
         stop_time = time.time()
         LOGGER.info(f'{self.mode} dataset loaded in {stop_time - stop_time: .3f} s.\n'
@@ -125,10 +135,10 @@ class SubjectsDataset(Dataset):
         """
         image, labels = self.images[idx], self.labels[idx]
 
-        # # TODO: transformare log
-        # # Normalize the image in the [0, 1] range
-        # for slice in np.shape(image, 0):
-        #     image[slice, :, :] = (image[slice, :, :] - np.amin(image[slice, :, :])) / (np.amax(image[slice]) - np.amin(image[slice]))
+        # Process the image
+        image = du.preprocess(image=image,
+                              padding=int(self.data_padding),
+                              mode=self.processing_modality)
 
         # Apply transforms if they exist
         if self.transform:
@@ -140,9 +150,3 @@ class SubjectsDataset(Dataset):
             "image": image,
             "labels": labels,
         }
-
-    def __crop_or_pad(self, slice):
-        pass
-
-    def __preprocess(self):
-        pass

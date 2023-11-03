@@ -10,6 +10,9 @@
 
   "plane": "coronal",
 
+  "preprocessing_modality": "percentiles_&_zscore",
+  "data_padding": 320,
+
   "lr": 0.0005,
   "lr_sch_step": 10,
   "lr_sch_gamma": 0.5,

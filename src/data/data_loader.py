@@ -13,6 +13,9 @@ def get_data_loader(cfg,
 
     Parameters
     ----------
+    cfg: dict
+        configuration parameters
+
     data_path: str
         data directory path
 
@@ -21,9 +24,6 @@ def get_data_loader(cfg,
 
     mode: str
         train/test data loader
-
-    shuffle: bool
-        whether to shuffle the data or not
 
     Returns
     -------
@@ -60,6 +60,7 @@ def get_data_loader(cfg,
     # Create the SubjectsDataset instance
     dataset = SubjectsDataset(cfg=cfg,
                               path=data_path,
+                              mode=mode,
                               transform=transform,
                               target_transform=None)
 
