@@ -3,7 +3,7 @@
   "exp_path": "./experiments",
   "about_experiment": "Details about the performed experiment",
 
-  "data_path": "D:\\MyProjects\\DeepBrainSegmentation\\dataset",
+  "data_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\dataset",
   "train_size": 0.70,
   "valid_size": 0.15,
   "test_size": 0.15,
@@ -11,7 +11,7 @@
   "plane": "coronal",
 
   "preprocessing_modality": "percentiles_&_zscore",
-  "data_padding": 320,
+  "data_padding": "320, 320, 320",
 
   "lr": 0.0005,
   "lr_sch_step": 10,
@@ -27,7 +27,7 @@
   "eval_net_epoch": 1,
   "save_net_epochs": 30,
 
-  "lut_path": "D:\\MyProjects\\DeepBrainSegmentation\\config\\FastSurfer_ColorLUT.tsv",
+  "lut_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\config\\FastSurfer_ColorLUT.tsv",
 
   "print_loss": 20,
   "resume_training": false

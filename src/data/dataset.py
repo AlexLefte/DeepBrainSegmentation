@@ -47,7 +47,7 @@ class SubjectsDataset(Dataset):
         self.processing_modality = cfg['preprocessing_modality']
 
         # Get data padding:
-        self.data_padding = cfg['data_padding']
+        self.data_padding = [int(x) for x in cfg['data_padding'].split(',')]
 
         # Lists for images, labels, label weights, and zooms
         self.images = []
@@ -83,11 +83,24 @@ class SubjectsDataset(Dataset):
                                        right_left_map=self.right_left_dict,
                                        plane=self.plane)
 
-            # Transform according to the current plane:
-            img_data, zooms, new_labels = du.fix_orientation(img_data,
-                                                             zooms,
-                                                             new_labels,
-                                                             self.plane)
+            # # Transform according to the current plane:
+            # img_data, zooms, new_labels = du.fix_orientation(img_data,
+            #                                                  zooms,
+            #                                                  new_labels,
+            #                                                  self.plane)
+            #
+            # # Plot some results
+            # fig, axs = plt.subplots(1,2, figsize=(12, 4))
+            # axs[0].imshow(img_data[img_data.shape[0] // 2, :, :], cmap='gray', origin='lower')
+            # axs[0].set_title(f'Original image slice (plane: {self.plane})')
+            # axs[1].imshow(new_labels[img_data.shape[0] // 2, :, :], origin='lower')
+            # axs[1].set_title(f'Labeled slice (plane: {self.plane})')
+            #
+            # # Adjust spacing between subplots for better layout
+            # plt.tight_layout()
+            #
+            # # Show the plot
+            # plt.show()
 
             # Append the new subject to the dataset
             self.images.append(img_data)
@@ -136,17 +149,20 @@ class SubjectsDataset(Dataset):
         image, labels = self.images[idx], self.labels[idx]
 
         # Process the image
-        image = du.preprocess(image=image,
-                              padding=int(self.data_padding),
-                              mode=self.processing_modality)
+        image_processed, labels_processed = du.preprocess(image=image,
+                                                          labels=labels,
+                                                          padding=self.data_padding,
+                                                          mode=self.processing_modality)
 
         # Apply transforms if they exist
         if self.transform:
-            image = self.transform(image)
+            image_processed = self.transform(image_processed)
         if self.target_transform:
-            labels = self.target_transform(labels)
+            labels_processed = self.target_transform(labels_processed)
+
+        du.compare_intensity(image, image_processed)
 
         return {
-            "image": image,
-            "labels": labels,
+            "image": image_processed,
+            "labels": labels_processed,
         }

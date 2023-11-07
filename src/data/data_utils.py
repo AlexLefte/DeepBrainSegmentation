@@ -189,10 +189,24 @@ def compare_intensity_across_dataset(subjects: list,
 #####################
 
 
+def compare_intensity(original,
+                      processed):
+    # Calculate statistics
+    print("Original mean: " + str(np.mean(original)))
+    print("Original std: " + str(np.std(original)))
+    print("Processed mean: " + str(np.mean(processed)))
+    print("Processed std: " + str(np.std(processed)))
+#####################
+
+
 # Data Preprocessing
-def crop_or_pad(image: np.ndarray, target_shape: list) -> np.ndarray:
+def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> np.ndarray:
+    # Assert shapes match
+    assert image.shape == labels.shape, ("The original image and its associated labels"
+                                         " have different shapes")
+
     # Get the current shape of the data
-    current_shape = list(image.shape)
+    current_shape = image.shape
 
     # Initialize padding values to zero
     padding = [(0, 0), (0, 0), (0, 0)]
@@ -230,16 +244,18 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
 
     if plane == 'axial':
         img = np.moveaxis(img, [0, 1, 2], [1, 0, 2])
-        # labels = np.moveaxis(labels, [0, 1, 2], [1, 2, 0])
-        # weights = np.moveaxis(weights, [0, 1, 2], [1, 2, 0])
+        labels = np.moveaxis(labels, [0, 1, 2], [1, 0, 2])
+        zooms = zooms[1:]
     elif plane == 'sagittal':
         img = np.moveaxis(img, [0, 1, 2], [2, 1, 0])
-        # labels = np.moveaxis(labels, [0, 1, 2], [2, 1, 0])
-        # weights = np.moveaxis(weights, [0, 1, 2], [2, 1, 0])
+        labels = np.moveaxis(labels, [0, 1, 2], [2, 1, 0])
+        zooms = zooms[:2]
+    else:
+        zooms = zooms[:2]
     return img, zooms, labels
 
 
-def preprocess(image: np.ndarray, padding: int, mode: str) -> np.ndarray:
+def preprocess(image: np.ndarray, labels: np.ndarray, padding: list, mode: str) -> (np.ndarray, np.ndarray):
     """
     Performs preprocessing.
     There are several methods to preprocess the study:
@@ -270,12 +286,13 @@ def preprocess(image: np.ndarray, padding: int, mode: str) -> np.ndarray:
         1) "percentiles_&_zscore"
         2) "log_norm_&_zscore"    """
     # 1) Crop or pad
-    image = crop_or_pad(image, padding)
+    image = crop_or_pad(image, labels, padding)
     #############
 
     # 2) Normalization using the torchio pipeline
     # Create transforms list
     transforms_list = []
+    image = torch.from_numpy(image).unsqueeze(0)
 
     if mode == 'percentiles_&_zscore':
         # Append the RescaleIntensity and ZNormalization transforms
@@ -285,27 +302,31 @@ def preprocess(image: np.ndarray, padding: int, mode: str) -> np.ndarray:
         # Append the ZNormalization transform
         transforms_list.append(tio.ZNormalization())
         # Apply log transform on the image
-        # Note: TorchhIO does not implement such scaling
+        # Note: TorchIO does not implement such a scaling mode
         image = np.log(image)
     else:
         # Wrong mode => return initial image
         print("Invalid mode.")
         return image
 
-    # Initializing the torchio.Subject instance.
-    # Create a subject
-    subject = tio.Subject()
+    for transform in transforms_list:
+        image = transform(image)
 
-    # Create a TorchIO pipeline and add the transforms
-    pipeline = tio.Compose(transforms_list)
+    return image.squeeze(0).numpy(), labels
+    # # Initializing the torchio.Subject instance.
+    # # Create a subject
+    # subject = tio.Subject()
+    #
+    # # Create a TorchIO pipeline and add the transforms
+    # pipeline = tio.Compose(transforms_list)
+    #
+    # # Add the image to the subject
+    # scalar_image = tio.ScalarImage(tensor=image)
+    # subject.add_image(scalar_image, 'subject')
+    #
+    # # Apply the pipeline to the subject
+    # subject = pipeline(subject)
 
-    # Add the image to the subject
-    scalar_image = tio.ScalarImage(tensor=image)
-    subject.add_image(scalar_image, 'subject')
-
-    # Apply the pipeline to the subject
-    subject = pipeline(subject)
-
-    return subject['subject']
+    #return subject['subject'], labels
 ####################
 

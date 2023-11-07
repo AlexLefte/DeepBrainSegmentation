@@ -37,7 +37,7 @@ if __name__ == '__main__':
     logger.create_logger(LOG_PATH)
 
     # Initialize CUDA
-    torch.cuda.init()
+    # torch.cuda.init()
 
     # Set up the device
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -48,6 +48,8 @@ if __name__ == '__main__':
     train_data = SubjectsDataset(cfg=cfg,
                                  path=DATA_PATH,
                                  mode='train')
+
+    result = train_data[0]
 
     # Define some parameters
     # params = {
