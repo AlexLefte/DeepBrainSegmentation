@@ -103,9 +103,9 @@ class SubjectsDataset(Dataset):
             # plt.show()
 
             # Append the new subject to the dataset
-            self.images.append(img_data)
-            self.labels.append(new_labels)
-            self.zooms.append(zooms)
+            self.images.extend(img_data)
+            self.labels.extend(new_labels)
+            self.zooms.extend((zooms, ) * img_data.shape[0])
 
         if mode == 'train':
             # Compute the weights (useful in the median frequency balanced logistic loss)
@@ -115,9 +115,9 @@ class SubjectsDataset(Dataset):
 
                 for uc in unique_classes:
                     if uc in self.weights.keys():
-                        self.weights[uc] += count
+                        self.weights[uc] += count[0]
                     else:
-                        self.weights[uc] = count
+                        self.weights[uc] = count[0]
 
             # Compute the median
             median_count = np.median(list(self.weights.values()))
@@ -125,9 +125,14 @@ class SubjectsDataset(Dataset):
             for weight, class_count in self.weights.items():
                 self.weights[weight] = median_count / class_count
 
-        # Check the intensity statistics across the dataset
-        du.compare_intensity_across_dataset(self.images,
-                                            self.subjects)
+        # Check the intensity statistics across the dataset (before preprocessing)
+        # du.compare_intensity_across_subjects(self.images,
+        #                                     self.subjects)
+        du.compare_intensity_across_dataset(self.images)
+
+        # Preprocess the data (based on statistics of the entire r  ````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````\Aespective dataset
+
+        # Check the intensity statistics across the dataset (after preprocessing)
 
         # Get stop time and display info
         stop_time = time.time()

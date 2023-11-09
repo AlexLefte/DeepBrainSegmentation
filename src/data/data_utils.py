@@ -148,7 +148,7 @@ def get_sagittal_labels_from_lut(lut: pd.DataFrame) -> list:
 
 
 # Data vizualization ###
-def compare_intensity_across_dataset(subjects: list,
+def compare_intensity_across_subjects(subjects: list,
                                      subjects_names: list):
     # Initialize lists to store intensity statistics for each subject
     mean_intensity_values = []
@@ -157,7 +157,7 @@ def compare_intensity_across_dataset(subjects: list,
     # Calculate and compare intensity statistics for each subject and ROI
     for subject_data in subjects:
         # Print shapes
-        print(subject_data.shape)
+        # print(subject_data.shape)
 
         # Calculate statistics
         mean_intensity = np.mean(subject_data)
@@ -167,8 +167,31 @@ def compare_intensity_across_dataset(subjects: list,
         mean_intensity_values.append(mean_intensity)
         std_intensity_values.append(std_intensity)
 
-    print(mean_intensity_values)
-    print(std_intensity_values)
+    # print(mean_intensity_values)
+    # print(std_intensity_values)
+
+    # Visualize and compare intensity values using plots or other methods
+    plt.figure(figsize=(10, 5))
+    plt.bar(subjects_names, mean_intensity_values, label='Mean Intensity')
+    plt.xlabel('Subjects')
+    plt.ylabel('Mean Intensity')
+    plt.legend()
+    plt.title('Comparison of MRI Mean Intensity Across Subjects')
+    plt.show()
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(subjects_names, std_intensity_values, label='Std Intensity')
+    plt.xlabel('Subjects')
+    plt.ylabel('Std')
+    plt.legend()
+    plt.title('Comparison of MRI Standard Deviation Across Subjects')
+    plt.show()
+
+
+def compare_intensity_across_dataset(slices: list):
+    # Calculate statistics
+    mean_intensity = np.mean(slices)
+    std_intensity = np.std(slices)
 
     # Visualize and compare intensity values using plots or other methods
     plt.figure(figsize=(10, 5))
@@ -292,7 +315,8 @@ def preprocess(image: np.ndarray, labels: np.ndarray, padding: list, mode: str) 
     # 2) Normalization using the torchio pipeline
     # Create transforms list
     transforms_list = []
-    image = torch.from_numpy(image).unsqueeze(0)
+    # image = torch.from_numpy(image).unsqueeze(0)
+    image = tio.ScalarImage(tensor=image)
 
     if mode == 'percentiles_&_zscore':
         # Append the RescaleIntensity and ZNormalization transforms
@@ -303,7 +327,7 @@ def preprocess(image: np.ndarray, labels: np.ndarray, padding: list, mode: str) 
         transforms_list.append(tio.ZNormalization())
         # Apply log transform on the image
         # Note: TorchIO does not implement such a scaling mode
-        image = np.log(image)
+        image.set_data(np.log(image.data.numpy() + 1))
     else:
         # Wrong mode => return initial image
         print("Invalid mode.")
@@ -313,20 +337,5 @@ def preprocess(image: np.ndarray, labels: np.ndarray, padding: list, mode: str) 
         image = transform(image)
 
     return image.squeeze(0).numpy(), labels
-    # # Initializing the torchio.Subject instance.
-    # # Create a subject
-    # subject = tio.Subject()
-    #
-    # # Create a TorchIO pipeline and add the transforms
-    # pipeline = tio.Compose(transforms_list)
-    #
-    # # Add the image to the subject
-    # scalar_image = tio.ScalarImage(tensor=image)
-    # subject.add_image(scalar_image, 'subject')
-    #
-    # # Apply the pipeline to the subject
-    # subject = pipeline(subject)
-
-    #return subject['subject'], labels
 ####################
 
