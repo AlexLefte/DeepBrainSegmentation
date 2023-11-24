@@ -23,12 +23,25 @@
 
   "loss_function": "dice_loss_&_cross_entropy",
 
-  "train_epochs": 50,
+  "epochs": 10,
+  "train_epochs": 10,
   "eval_net_epoch": 1,
   "save_net_epochs": 30,
 
   "lut_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\config\\FastSurfer_ColorLUT.tsv",
 
-  "print_loss": 20,
+  "in_channels": 1,
+  "filters": 64,
+  "kernel_h": 5,
+  "kernel_w": 5,
+  "stride": 1,
+  "pool": 2,
+  "pool_kernel": 1,
+  "pool_stride": 2,
+  "classifier_kernel": 1,
+  "num_classes": 79,
+  "device": "cpu",
+
+  "print_stats": 10,
   "resume_training": false
 }

@@ -1,41 +1,50 @@
-import torch
-import csv
-from torch.utils.data import Dataset
-import time
 import nibabel as nib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import torchio as tio
 import nibabel.orientations as orientations
-import os
-from torchvision import transforms
 
 
-# def compute_weights(labels: np.ndarray) -> np.ndarray:
-#     """
-#     Computes the classes weights matrix
-#
-#     Parameters
-#     ----------
-#     labels: np.ndarray
-#         image labels
-#     """
-#     # Retrieve the unique classes found inside an image
-#     # and also their frequency
-#     unique, counts = np.unique(labels, return_counts=True)
-#
-#
-#
-#
-#     # Median Frequency Balancing
-#     class_wise_weights = np.median(counts) / counts
-#     class_wise_weights[class_wise_weights > max_weight] = max_weight
-#     (h, w, d) = mapped_aseg.shape
-#
-#     weights_mask = np.reshape(class_wise_weights[mapped_aseg.ravel()], (h, w, d))
-#
-#     return weights_mask
+def compute_weights(labels: list) -> (list, dict):
+    """
+    Computes the classes weights matrix
+
+    Parameters
+    ----------
+    labels: np.ndarray
+        image labels
+    """
+    # Initialize the weights list
+    weights_list = []
+
+    # Stacks the labelled slices:
+    stacked_labels = np.stack(labels, axis=0)
+
+    # Get the unique values in the label matrix
+    unique_classes, count = np.unique(stacked_labels, return_counts=True)
+
+    # Compute the median
+    median_count = np.median(count)
+
+    # Convert to float type
+    count = np.array(count, dtype=float)
+
+    # Compute the weight for each class and save it into the dictionary
+    for i in range(len(count)):
+        count[i] = float(median_count) / count[i]
+
+    # Create the class weights dictionary
+    weights_dict = dict(zip(unique_classes, count))
+
+    # Define a weight ndarray for each training slice
+    for label_array in labels:
+        # Apply the mapping to the original matrix
+        weights_array = np.vectorize(weights_dict.get)(label_array)
+
+        # Append the new weight matrix to the collection:
+        weights_list.append(weights_array)
+    return weights_list, weights_dict
 
 
 def get_labels(labels: np.ndarray,
@@ -80,11 +89,11 @@ def get_labels(labels: np.ndarray,
         return new_labels
 
 
-def get_labels_from_lut(path: str) -> dict.keys:
-    """
-    Get labels from LUT
-    """
-    return get_lut(path).keys()
+# def get_labels_from_lut(path: str) -> dict.keys:
+#     """
+#     Get labels from LUT
+#     """
+#     return get_lut(path).keys()
 
 
 def get_labels_from_lut(lut: pd.DataFrame) -> dict.keys:
@@ -188,28 +197,24 @@ def compare_intensity_across_subjects(subjects: list,
     plt.show()
 
 
-def compare_intensity_across_dataset(slices: list):
-    # Calculate statistics
-    mean_intensity = np.mean(slices)
-    std_intensity = np.std(slices)
+def compare_intensity_across_dataset(stacked_slices: np.ndarray):
+    # Stack the slices along a new axis (axis=0)
+    # stacked_arrays = np.stack(slices, axis=0)
 
-    # Visualize and compare intensity values using plots or other methods
-    plt.figure(figsize=(10, 5))
-    plt.bar(subjects_names, mean_intensity_values, label='Mean Intensity')
-    plt.xlabel('Subjects')
-    plt.ylabel('Mean Intensity')
-    plt.legend()
-    plt.title('Comparison of MRI Mean Intensity Across Subjects')
-    plt.show()
+    # Compute mean and std along the new axis
+    mean_intensity = np.mean(stacked_slices)
+    std_intensity = np.std(stacked_slices)
 
-    plt.figure(figsize=(10, 5))
-    plt.bar(subjects_names, std_intensity_values, label='Std Intensity')
-    plt.xlabel('Subjects')
-    plt.ylabel('Std')
-    plt.legend()
-    plt.title('Comparison of MRI Standard Deviation Across Subjects')
-    plt.show()
-#####################
+    # Compute min, max values
+    min_intensity = np.min(stacked_slices)
+    max_intensity = np.max(stacked_slices)
+
+    print("=====================================")
+    print(f"Mean along dataset: {mean_intensity}")
+    print(f"Std along dataset: {std_intensity}")
+    print(f"Min value: {min_intensity}")
+    print(f"Max value: {max_intensity}")
+    print("======================================")
 
 
 def compare_intensity(original,
@@ -219,11 +224,122 @@ def compare_intensity(original,
     print("Original std: " + str(np.std(original)))
     print("Processed mean: " + str(np.mean(processed)))
     print("Processed std: " + str(np.std(processed)))
+
+
+def plot_histogram(data: np.ndarray,
+                   title: str = ''):
+    # Get stacked data:
+    stacked_data = np.stack(data, axis=0)
+
+    # Flatten the stacked data to create a 1D array
+    flatten_data = stacked_data.flatten()
+
+    # Plot the histogram
+    plt.hist(flatten_data, bins=100, edgecolor='black')  # Adjust the number of bins as needed
+    plt.title(title)
+    plt.xlabel('Value')
+    plt.ylabel('Frequency')
+
+    # Show the plot
+    plt.show()
+
+
+def plot_loss_curves(results: dict[str, list[float]]):
+    """
+    Plots training curves of a results dictionary
+    """
+    # Get the loss values of the results dictionary (training and test)
+    loss = results["train_loss"]
+    test_loss = results["test_loss"]
+
+    # Get the accuracy values of the results dictionary (training and test)
+    accuracy = results["train_acc"]
+    test_accuracy = results["test_acc"]
+
+    # Figure out how many epochs there were
+    epochs = range(len(results["train_loss"]))
+
+    # Setup a plot
+    plt.figure(figsize=(15, 7))
+
+    # Plot the loss
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, loss, label="train_loss")
+    # plt.plot(epochs, test_loss, label="test_loss")
+    plt.title("Combined Loss")
+    plt.xlabel("Epochs")
+    plt.legend()
+
+    # Plot the accuracy
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, accuracy, label="train_accuracy")
+    # plt.plot(epochs, test_accuracy, label="test_accuracy")
+    plt.title("Accuracy")
+    plt.xlabel("Epochs")
+    plt.legend()
+    plt.show()
+
+
+def plot_slices(slices: list, title: str = ''):
+    """
+    Plots a series of slices.
+
+    Parameters:
+    - slices: MRI slices to plot
+    - title: Can be the subject's name, or any kind of information
+    """
+    # Plot multiple slices along the first axis
+    num_slices = len(slices)
+    fig, axes = plt.subplots(1, num_slices, figsize=(15, 5))
+
+    for i in range(num_slices):
+        axes[i].imshow(slices[i], cmap='gray', origin='lower')
+        axes[i].set_title(f'Slice {i}')
+        axes[i].axis('off')
+    plt.show()
 #####################
 
 
 # Data Preprocessing
-def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> np.ndarray:
+def remove_blank_slices(images: np.ndarray,
+                        labels: np.ndarray,
+                        threshold: int = 20):
+    """
+    Removes slices with very few labeled voxels.
+
+    Parameters
+    ----------
+    images:
+        the MRI volume as a
+    labels:
+        the labeled volume
+    threshold:
+        the minimum sum a slice has to accomplish in order to be kept
+
+    Returns
+    -------
+    The volumes without those slices that do not meet the requirements
+    """
+    # Compute the sums of the labels for each slice
+    slices_sums = np.sum(labels, axis=(1, 2))
+
+    # Select those slices with at least 20 voxels different from background
+    selected_slices = np.where(slices_sums > threshold)
+
+    # # Plot some blank slices:
+    # unselected_slices = np.where(slices_sums <= threshold)
+    # for i in unselected_slices[0][0::5]:
+    #     plt.figure(), plt.imshow(images[i, :, :], cmap='gray')
+    #     plt.show()
+
+    # Return the selected slices
+    return images[selected_slices], labels[selected_slices]
+
+
+def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> (np.ndarray, np.ndarray):
+    """
+    Crops or pads slices to fit the standard dimension given by the configuration file.
+    """
     # Assert shapes match
     assert image.shape == labels.shape, ("The original image and its associated labels"
                                          " have different shapes")
@@ -232,7 +348,7 @@ def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> np
     current_shape = image.shape
 
     # Initialize padding values to zero
-    padding = [(0, 0), (0, 0), (0, 0)]
+    padding = [(0, 0), (0, 0)]
 
     # Check if cropping or padding is needed in each dimension
     for i in range(len(current_shape)):
@@ -249,8 +365,9 @@ def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> np
             padding[i] = (crop_start, crop_end)
 
     # Pad or crop the original data
-    padded_data = np.pad(image, padding, mode='constant', constant_values=0)
-    return padded_data
+    padded_image = np.pad(image, padding, mode='constant', constant_values=0)
+    padded_labels = np.pad(labels, padding, mode='constant', constant_values=0)
+    return padded_image, padded_labels
 
 
 def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
@@ -265,28 +382,78 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
     # zooms = nib.orientations.apply_orientation(zooms, desired_orientation)
     # labels = nib.orientations.apply_orientation(labels, desired_orientation)
 
+    # if plane == 'axial':
+    #     img = np.moveaxis(img, [0, 1, 2], [1, 0, 2])
+    #     labels = np.moveaxis(labels, [0, 1, 2], [1, 0, 2])
+    #     zooms = zooms[1:]
+    # elif plane == 'sagittal':
+    #     img = np.moveaxis(img, [0, 1, 2], [2, 1, 0])
+    #     labels = np.moveaxis(labels, [0, 1, 2], [2, 1, 0])
+    #     zooms = zooms[:2]
+    # else:
+    #     zooms = zooms[:2]
+
     if plane == 'axial':
-        img = np.moveaxis(img, [0, 1, 2], [1, 0, 2])
-        labels = np.moveaxis(labels, [0, 1, 2], [1, 0, 2])
+        img = img.transpose((1, 0, 2))
+        labels = labels.transpose((1, 0, 2))
         zooms = zooms[1:]
     elif plane == 'sagittal':
-        img = np.moveaxis(img, [0, 1, 2], [2, 1, 0])
-        labels = np.moveaxis(labels, [0, 1, 2], [2, 1, 0])
+        img = img.transpose((2, 1, 0))
+        labels = labels.transpose((2, 1, 0))
         zooms = zooms[:2]
     else:
         zooms = zooms[:2]
     return img, zooms, labels
 
 
-def preprocess(image: np.ndarray, labels: np.ndarray, padding: list, mode: str) -> (np.ndarray, np.ndarray):
+def preprocess(images: list,
+               padding: list = (320, 320, 320),
+               mode: str = 'percentiles_&_zscore'):
     """
-    Performs preprocessing.
-    There are several methods to preprocess the study:
+    Performs cropping, normalization, followed by augmentation.
     1) Crop or pad:
         - Set a standard input size.
         - If data shape is above the standard size => crop
         - If data shape is below the standard size => pad
     2) Normalization:
+    """
+    # 1) Crop or pad
+    # for i in range(len(images)):
+    #     images[i], labels[i] = crop_or_pad(images[i], labels[i], padding)
+    #############
+
+    # Initialize a transformations list
+    transforms_list = []
+
+    # 2) Normalize
+    transforms_list.extend(get_norm_transforms())
+
+    # 3) Apply transformations:
+    # Stack all images into a single 3D array
+    stacked_images = np.stack(images, axis=0)
+    stacked_images = np.expand_dims(stacked_images, axis=0)
+
+    # Create a TorchIO ScalarImage instance
+    image = tio.ScalarImage(tensor=stacked_images)
+
+    # Apply each transformation
+    for transform in transforms_list:
+        image = transform(image)
+
+    # Retrieve the transformed NumPy array
+    transformed_image_array = image.data.numpy()
+
+    # Split the transformed array back into individual images
+    transformed_image_array = np.squeeze(transformed_image_array)
+    transformed_images = [np.squeeze(image) for image in np.split(transformed_image_array, len(images), axis=0)]
+
+    return transformed_images
+
+
+def get_norm_transforms(mode: str = 'percentiles_&_zscore') -> (np.ndarray, np.ndarray):
+    """
+    Provides data normalization transforms.
+    Normalization types:
         * Intensity rescaling:
             - Use percentiles (e.g: (0.5, 99.5)).
             - Usually applied for CT scans
@@ -298,44 +465,29 @@ def preprocess(image: np.ndarray, labels: np.ndarray, padding: list, mode: str) 
         * Log normalization
             - Another approach would be to log the data and rescale using percentiles
 
-    Attributes
+    Parameters
     ----------
-    image
-        Unprocessed image as numpy.ndarray
-    padding
-        Padded input size to ensure the consistency
     mode
-        Preprocessing mode:
-        1) "percentiles_&_zscore"
-        2) "log_norm_&_zscore"    """
-    # 1) Crop or pad
-    image = crop_or_pad(image, labels, padding)
-    #############
-
-    # 2) Normalization using the torchio pipeline
-    # Create transforms list
+        'percentiles_&_zscore' or 'log_norm_&_zscore'
+    """
+    # Initialize a transforms list:
     transforms_list = []
-    # image = torch.from_numpy(image).unsqueeze(0)
-    image = tio.ScalarImage(tensor=image)
 
     if mode == 'percentiles_&_zscore':
         # Append the RescaleIntensity and ZNormalization transforms
         transforms_list.append(tio.RescaleIntensity(percentiles=(0.5, 99.5)))
         transforms_list.append(tio.ZNormalization())
-    elif mode == 'log_norm_&_zscore':
-        # Append the ZNormalization transform
-        transforms_list.append(tio.ZNormalization())
-        # Apply log transform on the image
-        # Note: TorchIO does not implement such a scaling mode
-        image.set_data(np.log(image.data.numpy() + 1))
+    # elif mode == 'log_norm_&_zscore':
+    #     # Append the ZNormalization transform
+    #     transforms_list.append(tio.ZNormalization())
+    #     # Apply log transform on the image
+    #     # Note: TorchIO does not implement such a scaling mode
+    #     stacked_images = np.log(stacked_images + 1)
     else:
         # Wrong mode => return initial image
-        print("Invalid mode.")
-        return image
-
-    for transform in transforms_list:
-        image = transform(image)
-
-    return image.squeeze(0).numpy(), labels
+        # LOGGER.info("Invalid normalization mode.")
+        return []
+    return transforms_list
 ####################
+
 

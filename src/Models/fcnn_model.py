@@ -130,12 +130,13 @@ class EncodingCDB(CompetitiveDenseBlock):
         2) output_block - maxpooled feature map
         3) indices
         """
-
-        print(f"\nEncoding block: {__name__}\n---------")
         output_block = super(EncodingCDB, self).forward(x)
-        print(f"Shape after CDB: {output_block.shape}.")
         output_encoder, indices = self.max_pool(output_block)
-        print(f"Shape after maxpool: {output_encoder.shape}")
+
+        if self.verbose:
+            print(f"\nEncoding block: {__name__}\n---------")
+            print(f"Shape after CDB: {output_block.shape}.")
+            print(f"Shape after maxpool: {output_encoder.shape}")
         return output_encoder, output_block, indices
 
 
@@ -162,14 +163,15 @@ class DecodingCDB(CompetitiveDenseBlock):
         """
         Forward pass
         """
-
-        print(f"\nDecoding block: {__name__}\n---------")
         unpool_output = self.max_unpool(x, indices)
-        print(f"Shape after unpool: {unpool_output.shape}.")
         max_output = torch.maximum(unpool_output, output_block)
-        print(f"Shape after maxout: {max_output.shape}.")
         output = super(DecodingCDB, self).forward(max_output)
-        print(f"Shape after CDB: {output.shape}")
+
+        if self.verbose:
+            print(f"\nDecoding block: {__name__}\n---------")
+            print(f"Shape after unpool: {unpool_output.shape}.")
+            print(f"Shape after maxout: {max_output.shape}.")
+            print(f"Shape after CDB: {output.shape}")
         return output
 
 
@@ -200,7 +202,8 @@ class ClassifierBlock(nn.Module):
         """
         Returns the prediction probs
         """
-        return self.softmax(self.conv2d(x))
+        return self.conv2d(x)
+        # return self.softmax(self.conv2d(x))
 
 
 # Define the F-CNN architecture
@@ -235,7 +238,7 @@ class FCnnModel(nn.Module):
         self.enc4 = EncodingCDB(params=params)
 
         # 2. Bottleneck
-        self.bottleneck = CompetitiveDenseBlock(params=params, is_input=False, verbose=True)
+        self.bottleneck = CompetitiveDenseBlock(params=params, is_input=False, verbose=False)
 
         # 3. Defining the decoding sequence:
         self.dec4 = DecodingCDB(params=params)
