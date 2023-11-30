@@ -10,6 +10,10 @@ from data import data_utils as du
 
 import matplotlib.pyplot as plt
 
+import logging
+
+LOGGER = logging.getLogger(__name__)
+
 
 class Trainer:
     """
@@ -98,10 +102,6 @@ class Trainer:
                                                     y=labels,
                                                     weights=weights,
                                                     weights_dict=weights_dict)
-            # loss = self.loss_fn(y_predict=y_pred,
-            #                     y=labels,
-            #                     weights=weights,
-            #                     weights_dict=weights_dict)
 
             # Backward pass
             loss.backward()
@@ -109,14 +109,15 @@ class Trainer:
             # Optimizer step
             self.optimizer.step()
 
-            # Append the running loss and accuracy
+            # Append the running losses
             train_loss.append(loss.item())
             ce_loss_list.append(ce_loss.item())
             dice_loss_list.append(dice_loss.item())
+
+            # Compute and save the accuracy
             y_pred_class = torch.argmax(y_pred, dim=1)
             d, h, w = labels.shape
             train_acc.append((y_pred_class == labels).sum().item() / (d * h * w) * 100)
-            # train_acc.append((y_pred_class == labels).sum().item() / len(y_pred))
 
             # # Print some results from time to time:
             # if batch_idx % self.print_stats == 0 \
@@ -128,9 +129,8 @@ class Trainer:
             #     train_loss, train_acc = [], []
 
         # Finalize the training step
-        stop_time = time()
-        # logger.info(f'Training step is finished in: {stop_time - start_time} seconds.')
-        print(f'Training step is finished in: {stop_time - start_time} seconds.')
+        # stop_time = time()
+        # LOGGER.info(f'Training step is finished in: {stop_time - start_time} seconds.')
 
         mean_loss = sum(train_loss) / len(train_loss)
         mean_ce = sum(ce_loss_list) / len(ce_loss_list)
@@ -224,6 +224,7 @@ class Trainer:
         ce_loss_list, dice_loss_list = [], []
 
         # Start training
+        LOGGER.info('====Started training...====')
         start_time = time()
 
         # Loop through training and testing steps for a number of epochs
@@ -237,8 +238,8 @@ class Trainer:
             # print(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | "
             #       f"Test loss: {test_loss:.4f} | Test acc: {test_acc:.4f}")
             # print(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f}")
-            print(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | CE Loss: {ce_loss:.4f}"
-                  f" | Dice Loss: {dice_loss:.4f}")
+            LOGGER.info(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | CE Loss: {ce_loss:.4f}"
+                        f" | Dice Loss: {dice_loss:.4f}")
 
             # Update results dictionary
             results["train_loss"].append(train_loss)
@@ -250,7 +251,8 @@ class Trainer:
 
         # Stop training
         end_time = time()
-        print(f"Total training time: {end_time - start_time:.3f} seconds")
+        LOGGER.info(f"Total training time: {end_time - start_time:.3f} seconds"
+                    f"\n===================")
 
         # plt.figure(figsize=(15, 7))
         # plt.plot(range(self.epochs), results["train_loss"])
@@ -260,26 +262,25 @@ class Trainer:
         # plt.show()
 
         # Plot the loss/acc curves
-        du.plot_loss_curves(results)
+        # du.plot_loss_curves(results)
 
-        #
         # plot CE and Dice losses
         # Figure out how many epochs there were
-        epochs = range(len(ce_loss_list))
-
-        # Setup a plot
-        plt.figure(figsize=(15, 7))
-
-        # Plot the loss
-        plt.subplot(1, 2, 1)
-        plt.plot(epochs, ce_loss_list)
-        plt.title("CE Loss")
-        plt.xlabel("Epochs")
-
-        # Plot the accuracy
-        plt.subplot(1, 2, 2)
-        plt.plot(epochs, dice_loss_list)
-        plt.title("Dice Loss")
-        plt.xlabel("Epochs")
-        plt.legend()
-        plt.show()
+        # epochs = range(len(ce_loss_list))
+        #
+        # # Setup a plot
+        # plt.figure(figsize=(15, 7))
+        #
+        # # Plot the loss
+        # plt.subplot(1, 2, 1)
+        # plt.plot(epochs, ce_loss_list)
+        # plt.title("CE Loss")
+        # plt.xlabel("Epochs")
+        #
+        # # Plot the accuracy
+        # plt.subplot(1, 2, 2)
+        # plt.plot(epochs, dice_loss_list)
+        # plt.title("Dice Loss")
+        # plt.xlabel("Epochs")
+        # plt.legend()
+        # plt.show()

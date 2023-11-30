@@ -12,7 +12,6 @@ def create_logger(log_path, log_level=logging.INFO):
 
     if log_path:
         log_dir_path = os.path.dirname(log_path)
-        log_file_name = os.path.basename(log_path)
 
         if not os.path.exists(log_dir_path):
             os.makedirs(log_dir_path)
