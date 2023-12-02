@@ -43,5 +43,7 @@
   "device": "cpu",
 
   "print_stats": 10,
-  "resume_training": false
+  "resume_training": false,
+
+  "summary_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\src\\experiments\\summary"
 }

@@ -6,9 +6,8 @@ from tqdm import tqdm
 from time import time
 
 from data import data_loader
-from data import data_utils as du
 
-import matplotlib.pyplot as plt
+from src.utils.stats_manager import StatsManager
 
 import logging
 
@@ -60,13 +59,15 @@ class Trainer:
         self.device = device
         self.print_stats = cfg['print_stats']
         self.epochs = cfg['epochs']
+        self.stats = StatsManager(cfg)
 
-    def train_step(self):
+    def train_step(self,
+                   epoch: int):
         """
         Training step.
         """
         # Initiate the training step
-        # logger.info('Training started')
+        LOGGER.info('Training started')
         start_time = time()
 
         # Set up the training mode
@@ -86,10 +87,6 @@ class Trainer:
             labels = batch['labels'].to(self.device)
             weights = batch['weights'].to(self.device).float()
             weights_dict = batch['weights_dict'].to(self.device)[0].float()
-
-            # Get the unique values in the label matrix
-            unique_classes, counts = torch.unique(labels, return_counts=True)
-            unique_classes, counts = torch.unique(weights, return_counts=True)
 
             # Zero the gradients before every batch
             self.optimizer.zero_grad()
@@ -117,7 +114,19 @@ class Trainer:
             # Compute and save the accuracy
             y_pred_class = torch.argmax(y_pred, dim=1)
             d, h, w = labels.shape
-            train_acc.append((y_pred_class == labels).sum().item() / (d * h * w) * 100)
+            acc = (y_pred_class == labels).sum().item() / (d * h * w) * 100
+            train_acc.append(acc)
+
+            # Write stats per batch
+            # TODO: replace the learning rate after implementing the lr scheduler
+            self.stats.update_batch_stats(mode='train',
+                                          preds=y_pred_class,
+                                          labels=labels,
+                                          loss=loss.item(),
+                                          ce_loss=ce_loss.item(),
+                                          dice_loss=dice_loss.item(),
+                                          accuracy=acc,
+                                          lr=self.cfg['lr'])
 
             # # Print some results from time to time:
             # if batch_idx % self.print_stats == 0 \
@@ -129,13 +138,17 @@ class Trainer:
             #     train_loss, train_acc = [], []
 
         # Finalize the training step
-        # stop_time = time()
-        # LOGGER.info(f'Training step is finished in: {stop_time - start_time} seconds.')
+        stop_time = time()
+        LOGGER.info(f'Training step is finished in: {stop_time - start_time} seconds.')
 
         mean_loss = sum(train_loss) / len(train_loss)
         mean_ce = sum(ce_loss_list) / len(ce_loss_list)
         mean_dice = sum(dice_loss_list) / len(dice_loss_list)
         mean_acc = sum(train_acc) / len(train_acc)
+
+        # Update stats
+        self.stats.update_epoch_stats(mode='train',
+                                      epoch=epoch)
 
         # Return the final stats:
         return mean_loss, mean_acc, mean_ce, mean_dice
@@ -229,7 +242,8 @@ class Trainer:
 
         # Loop through training and testing steps for a number of epochs
         for epoch in tqdm(range(self.epochs)):
-            train_loss, train_acc, ce_loss, dice_loss = self.train_step()
+            # train_loss, train_acc, ce_loss, dice_loss = self.train_step(epoch)
+            self.train_step(epoch)
 
             #  test_loss, test_acc = self.eval_step()
             test_loss, test_acc = 0, 0
@@ -238,21 +252,23 @@ class Trainer:
             # print(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | "
             #       f"Test loss: {test_loss:.4f} | Test acc: {test_acc:.4f}")
             # print(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f}")
-            LOGGER.info(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | CE Loss: {ce_loss:.4f}"
-                        f" | Dice Loss: {dice_loss:.4f}")
 
-            # Update results dictionary
-            results["train_loss"].append(train_loss)
-            results["train_acc"].append(train_acc)
-            results["test_loss"].append(test_loss)
-            results["test_acc"].append(test_acc)
-            ce_loss_list.append(ce_loss)
-            dice_loss_list.append(dice_loss)
+            # Log some info
+            # LOGGER.info(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | CE Loss: {ce_loss:.4f}"
+            #             f" | Dice Loss: {dice_loss:.4f}")
+            #
+            # # Update results dictionary
+            # results["train_loss"].append(train_loss)
+            # results["train_acc"].append(train_acc)
+            # results["test_loss"].append(test_loss)
+            # results["test_acc"].append(test_acc)
+            # ce_loss_list.append(ce_loss)
+            # dice_loss_list.append(dice_loss)
 
         # Stop training
         end_time = time()
         LOGGER.info(f"Total training time: {end_time - start_time:.3f} seconds"
-                    f"\n===================")
+                    f"\n======================")
 
         # plt.figure(figsize=(15, 7))
         # plt.plot(range(self.epochs), results["train_loss"])

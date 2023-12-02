@@ -47,7 +47,7 @@ if __name__ == '__main__':
     LOGGER.info('=====================\n')
 
     # Initialize CUDA
-    torch.cuda.init()
+    # torch.cuda.init()
 
     # Set up the device
     # device = 'cpu'
