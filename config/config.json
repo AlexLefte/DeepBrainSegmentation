@@ -1,7 +1,8 @@
 {
-  "exp_name": "experiment_name",
-  "exp_path": "./experiments",
+  "exp_name": null,
   "about_experiment": "Details about the performed experiment",
+  "log_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\experiments\\logs\\",
+  "summary_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\experiments\\summary\\",
 
   "data_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\dataset",
   "train_size": 0.70,
@@ -13,9 +14,9 @@
   "preprocessing_modality": "percentiles_&_zscore",
   "data_padding": "320, 320, 320",
 
-  "lr": 0.0005,
-  "lr_sch_step": 10,
-  "lr_sch_gamma": 0.5,
+  "lr": 0.01,
+  "lr_step": 5,
+  "lr_gamma": 0.3,
   "weight_decay": 0.00001,
   "batch_size": 16,
 
@@ -23,8 +24,8 @@
 
   "loss_function": "dice_loss_&_cross_entropy",
 
-  "epochs": 10,
-  "train_epochs": 10,
+  "epochs": 30,
+  "train_epochs": 30,
   "eval_net_epoch": 1,
   "save_net_epochs": 30,
 
@@ -43,7 +44,5 @@
   "device": "cpu",
 
   "print_stats": 10,
-  "resume_training": false,
-
-  "summary_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\src\\experiments\\summary"
+  "resume_training": false
 }

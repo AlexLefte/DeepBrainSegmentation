@@ -8,14 +8,18 @@ import data
 from data.dataset import *
 from data.data_loader import get_data_loader
 from data import data_loader as loader
+from datetime import datetime
 
 from trainer import Trainer
 import models
 from models.fcnn_model import FCnnModel
 from models.loss import CombinedLoss
+from models.loss import Unified_CatFocal_FocalTversky
 from models.optimizer import get_optimizer
 
 from utils import logger
+from utils.stats_manager import StatsManager
+
 import json
 
 
@@ -34,10 +38,18 @@ if __name__ == '__main__':
     DATA_PATH = cfg['data_path']
     EXPERIMENT = cfg['exp_name']
     BATCH_SIZE = cfg['batch_size']
-    LOG_PATH = os.path.join(cfg['exp_path'], 'log', EXPERIMENT + '.log')
 
-    # Setup logger
+    # Set an experiment timestamp if name is missing
+    if EXPERIMENT is None:
+        EXPERIMENT = datetime.now().strftime("%m-%d-%y_%H-%M")
+
+    # Setup the logger
+    LOG_PATH = os.path.join(cfg['log_path'], EXPERIMENT + '.log')
     logger.create_logger(LOG_PATH)
+
+    # Set up the stats manager
+    SUMMARY_PATH = os.path.join(cfg['summary_path'], EXPERIMENT)
+    stats_manager = StatsManager(cfg['num_classes'], SUMMARY_PATH)
 
     # Log the current configuration
     LOGGER = logging.getLogger(__name__)
@@ -50,8 +62,8 @@ if __name__ == '__main__':
     # torch.cuda.init()
 
     # Set up the device
-    # device = 'cpu'
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
     LOGGER.info(f'Device: {device}')
 
     # # Testing the training loop
@@ -64,15 +76,21 @@ if __name__ == '__main__':
 
     # Initializing the loss & the optimizer
     loss_fn = CombinedLoss()
+    # loss_fn = Unified_CatFocal_FocalTversky()
     optimizer = get_optimizer(model=model,
-                              optimizer='SGD')
+                              optimizer='SGD',
+                              learning_rate=cfg['lr'])
+    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer,
+    #                                                step_size=cfg['lr_step'],
+    #                                                gamma=cfg['lr_gamma'])
+    lr_scheduler = None
 
     # Training
     trainer = Trainer(cfg=cfg,
                       model=model,
                       loss_fn=loss_fn,
                       optim=optimizer,
-                      scheduler=None,
+                      lr_sch=lr_scheduler,
+                      stats_manager=stats_manager,
                       device=device)
     trainer.train()
-

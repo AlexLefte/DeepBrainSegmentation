@@ -1,6 +1,5 @@
 import logging
 import os
-from sys import stdout as _stdout
 
 
 def create_logger(log_path, log_level=logging.INFO):

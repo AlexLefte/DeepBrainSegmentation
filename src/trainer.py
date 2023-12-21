@@ -35,7 +35,8 @@ class Trainer:
                  model: FCnnModel,
                  loss_fn: torch.nn.Module,
                  optim: Optimizer,
-                 scheduler: lr_scheduler,
+                 lr_sch: lr_scheduler,
+                 stats_manager: StatsManager,
                  device: str = 'cpu'):
         """
         Constructor
@@ -55,11 +56,11 @@ class Trainer:
                                                        mode='eval')
         self.loss_fn = loss_fn
         self.optimizer = optim
-        self.lr_scheduler = scheduler
+        self.lr_scheduler = lr_sch
         self.device = device
         self.print_stats = cfg['print_stats']
         self.epochs = cfg['epochs']
-        self.stats = StatsManager(cfg)
+        self.stats = stats_manager
 
     def train_step(self,
                    epoch: int):
@@ -75,10 +76,6 @@ class Trainer:
 
         # Initialize the train loss and accuracy
         train_loss, train_acc = [], []
-        ce_loss_list, dice_loss_list = [], []
-
-        # Initialize the mean stats
-        mean_loss, mean_acc = 0, 0
 
         # Loop through the data loader
         for batch_idx, batch in tqdm(enumerate(self.train_loader)):
@@ -95,10 +92,12 @@ class Trainer:
             y_pred = self.model(images)
 
             # Compute the loss
-            loss, ce_loss, dice_loss = self.loss_fn(y_predict=y_pred,
-                                                    y=labels,
+            loss, ce_loss, dice_loss = self.loss_fn(y_pred=y_pred,
+                                                    y_true=labels,
                                                     weights=weights,
                                                     weights_dict=weights_dict)
+            # loss = self.loss_fn(y_pred=y_pred,
+            #                     y_true=labels)
 
             # Backward pass
             loss.backward()
@@ -108,8 +107,6 @@ class Trainer:
 
             # Append the running losses
             train_loss.append(loss.item())
-            ce_loss_list.append(ce_loss.item())
-            dice_loss_list.append(dice_loss.item())
 
             # Compute and save the accuracy
             y_pred_class = torch.argmax(y_pred, dim=1)
@@ -118,15 +115,12 @@ class Trainer:
             train_acc.append(acc)
 
             # Write stats per batch
-            # TODO: replace the learning rate after implementing the lr scheduler
             self.stats.update_batch_stats(mode='train',
                                           preds=y_pred_class,
                                           labels=labels,
                                           loss=loss.item(),
-                                          ce_loss=ce_loss.item(),
-                                          dice_loss=dice_loss.item(),
                                           accuracy=acc,
-                                          lr=self.cfg['lr'])
+                                          lr=self.cfg['lr'] if self.lr_scheduler is None else self.lr_scheduler.get_last_lr()[0])
 
             # # Print some results from time to time:
             # if batch_idx % self.print_stats == 0 \
@@ -142,8 +136,6 @@ class Trainer:
         LOGGER.info(f'Training step is finished in: {stop_time - start_time} seconds.')
 
         mean_loss = sum(train_loss) / len(train_loss)
-        mean_ce = sum(ce_loss_list) / len(ce_loss_list)
-        mean_dice = sum(dice_loss_list) / len(dice_loss_list)
         mean_acc = sum(train_acc) / len(train_acc)
 
         # Update stats
@@ -151,7 +143,8 @@ class Trainer:
                                       epoch=epoch)
 
         # Return the final stats:
-        return mean_loss, mean_acc, mean_ce, mean_dice
+        # return mean_loss, mean_acc, mean_ce, mean_dice
+        return mean_loss, mean_acc
 
     def eval_step(self):
         """
@@ -228,14 +221,6 @@ class Trainer:
         # Transfer to device
         self.model = self.model.to(self.device)
 
-        # Create empty results dictionary
-        results = {"train_loss": [],
-                   "train_acc": [],
-                   "test_loss": [],
-                   "test_acc": []}
-
-        ce_loss_list, dice_loss_list = [], []
-
         # Start training
         LOGGER.info('====Started training...====')
         start_time = time()
@@ -245,58 +230,15 @@ class Trainer:
             # train_loss, train_acc, ce_loss, dice_loss = self.train_step(epoch)
             self.train_step(epoch)
 
-            #  test_loss, test_acc = self.eval_step()
-            test_loss, test_acc = 0, 0
-
-            # Print out what's happening
-            # print(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | "
-            #       f"Test loss: {test_loss:.4f} | Test acc: {test_acc:.4f}")
-            # print(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f}")
+            # Update the learning rate
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
 
             # Log some info
-            # LOGGER.info(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | CE Loss: {ce_loss:.4f}"
-            #             f" | Dice Loss: {dice_loss:.4f}")
-            #
-            # # Update results dictionary
-            # results["train_loss"].append(train_loss)
-            # results["train_acc"].append(train_acc)
-            # results["test_loss"].append(test_loss)
-            # results["test_acc"].append(test_acc)
-            # ce_loss_list.append(ce_loss)
-            # dice_loss_list.append(dice_loss)
+            # LOGGER.info(f"Epoch: {epoch} | Train loss: {train_loss:.4f} | Train acc: {train_acc:.4f} | CE Loss:
+            # {ce_loss:.4f}" f" | Dice Loss: {dice_loss:.4f}")
 
         # Stop training
         end_time = time()
         LOGGER.info(f"Total training time: {end_time - start_time:.3f} seconds"
                     f"\n======================")
-
-        # plt.figure(figsize=(15, 7))
-        # plt.plot(range(self.epochs), results["train_loss"])
-        # # plt.plot(epochs, test_loss, label="test_loss")
-        # plt.title("Loss")
-        # plt.xlabel("Epochs")
-        # plt.show()
-
-        # Plot the loss/acc curves
-        # du.plot_loss_curves(results)
-
-        # plot CE and Dice losses
-        # Figure out how many epochs there were
-        # epochs = range(len(ce_loss_list))
-        #
-        # # Setup a plot
-        # plt.figure(figsize=(15, 7))
-        #
-        # # Plot the loss
-        # plt.subplot(1, 2, 1)
-        # plt.plot(epochs, ce_loss_list)
-        # plt.title("CE Loss")
-        # plt.xlabel("Epochs")
-        #
-        # # Plot the accuracy
-        # plt.subplot(1, 2, 2)
-        # plt.plot(epochs, dice_loss_list)
-        # plt.title("Dice Loss")
-        # plt.xlabel("Epochs")
-        # plt.legend()
-        # plt.show()
