@@ -4,6 +4,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import torchio as tio
 import nibabel.orientations as orientations
+from torchvision import transforms
+import logging
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def compute_weights(labels: list) -> (list, dict):
@@ -488,6 +493,58 @@ def get_norm_transforms(mode: str = 'percentiles_&_zscore') -> (np.ndarray, np.n
         # LOGGER.info("Invalid normalization mode.")
         return []
     return transforms_list
+
+
+def get_aug_transforms():
+    """
+    Provides data augmentation transforms
+    See U-net paper:  https://arxiv.org/pdf/1809.10486.pdf (section Data Augmentation)
+    See TorchIO -> Transforms -> Augmentation: https://torchio.readthedocs.io/transforms/augmentation.html
+    """
+
+    # Append: rotation -> scaling -> translation -> elastic deformation -> gamma correction
+    return tio.Compose([
+        tio.RandomAffine(
+            scales=(1.0, 1.0),
+            degrees=10,
+            translation=(0, 0, 0),
+            isotropic=True,
+            center='image',
+            default_pad_value='minimum',
+            image_interpolation='linear',
+            include=['img', 'label', 'weight'],
+        ),
+        tio.RandomAffine(
+            scales=(0.8, 1.15),
+            degrees=0,
+            translation=(0, 0, 0),
+            isotropic=True,
+            center='image',
+            default_pad_value='minimum',
+            image_interpolation='linear',
+            include=['img', 'label', 'weight'],
+        ),
+        tio.RandomAffine(
+            scales=(1.0, 1.0),
+            degrees=0,
+            translation=(15.0, 15.0, 0),
+            isotropic=True,
+            center="image",
+            default_pad_value="minimum",
+            image_interpolation="linear",
+            include=["img", "label", "weight"]
+        ),
+        # tio.RandomElasticDeformation(
+        #     num_control_points=7,
+        #     max_displacement=15,
+        #     locked_borders=4,
+        #     image_interpolation='linear',
+        #     include=['img', 'label', 'weight'],
+        # ),
+        tio.transforms.RandomGamma(
+            log_gamma=(-0.3, 0.3), include=['img']
+        )]
+    )
 ####################
 
 

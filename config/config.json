@@ -1,13 +1,16 @@
 {
+  "exp_flag": false,
   "exp_name": null,
   "about_experiment": "Details about the performed experiment",
   "log_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\experiments\\logs\\",
   "summary_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\experiments\\summary\\",
 
   "data_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\dataset",
-  "train_size": 0.70,
-  "valid_size": 0.15,
+  "train_size": 0.7,
+  "val_size": 0.15,
   "test_size": 0.15,
+  "val_data_loader": false,
+  "test_data_loader": false,
 
   "plane": "coronal",
 

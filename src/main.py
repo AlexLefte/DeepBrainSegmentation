@@ -6,7 +6,6 @@ import os
 import nibabel as nib
 import data
 from data.dataset import *
-from data.data_loader import get_data_loader
 from data import data_loader as loader
 from datetime import datetime
 
