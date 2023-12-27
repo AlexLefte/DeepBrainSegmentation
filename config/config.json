@@ -1,18 +1,20 @@
 {
+  "base_path": "C:/Users/Engineer/Documents/Updates/Repo/DeepBrainSegmentation/",
+
+  "plane": "coronal",
   "exp_flag": false,
   "exp_name": null,
   "about_experiment": "Details about the performed experiment",
-  "log_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\experiments\\logs\\",
-  "summary_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\experiments\\summary\\",
+  "log_path": "experiments/{}/logs/",
+  "summary_path": "experiments/{}/summary/",
+  "checkpoint_path": "experiments/{}/checkpoints/",
 
-  "data_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\dataset",
+  "data_path": "dataset",
   "train_size": 0.7,
   "val_size": 0.15,
   "test_size": 0.15,
-  "val_data_loader": false,
+  "val_data_loader": true,
   "test_data_loader": false,
-
-  "plane": "coronal",
 
   "preprocessing_modality": "percentiles_&_zscore",
   "data_padding": "320, 320, 320",
@@ -32,7 +34,7 @@
   "eval_net_epoch": 1,
   "save_net_epochs": 30,
 
-  "lut_path": "C:\\Users\\Engineer\\Documents\\Updates\\Repo\\DeepBrainSegmentation\\config\\FastSurfer_ColorLUT.tsv",
+  "lut_path": "config/FastSurfer_ColorLUT.tsv",
 
   "in_channels": 1,
   "filters": 64,

@@ -20,7 +20,7 @@ def get_data_loaders(cfg):
     data_loader: torch.utils.data
     """
     # Get the data path
-    data_path = cfg['data_path']
+    data_path = cfg['base_path'] + cfg['data_path']
 
     # Get the batch size
     batch_size = cfg['batch_size']
@@ -28,7 +28,6 @@ def get_data_loaders(cfg):
     # Get the subjects' paths
     subject_paths = [os.path.join(data_path, s) for s in os.listdir(data_path)
                      if os.path.isdir(os.path.join(data_path, s))]
-    subject_paths = [subject_paths[0]]
 
     # Shuffle the subjects
     random.shuffle(subject_paths)
@@ -55,6 +54,7 @@ def get_data_loaders(cfg):
     # Creating the custom datasets
     # # Training DataLoader
     train_set = subject_paths[:train_size]
+    train_set = [subject_paths[0]]
     train_dataset = SubjectsDataset(cfg=cfg,
                                     subjects=train_set,
                                     mode='train')
@@ -67,9 +67,11 @@ def get_data_loaders(cfg):
     # # Validation DataLoader
     if validation:
         val_set = subject_paths[train_size: train_size + val_size]
+        val_set = [subject_paths[1]]
         val_dataset = SubjectsDataset(cfg=cfg,
                                       subjects=val_set,
-                                      mode='test')
+                                      mode='test',
+                                      weights_dict=train_dataset.weights_dict)
         val_loader = DataLoader(
             dataset=val_dataset,
             batch_size=batch_size
@@ -80,7 +82,8 @@ def get_data_loaders(cfg):
         test_set = subject_paths[train_size + val_size:]
         test_dataset = SubjectsDataset(cfg=cfg,
                                        subjects=test_set,
-                                       mode='test')
+                                       mode='test',
+                                       weights_dict=train_dataset.weights_dict)
         test_loader = DataLoader(
             dataset=test_dataset,
             batch_size=batch_size

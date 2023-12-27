@@ -1,4 +1,3 @@
-import torch
 from torch.optim import lr_scheduler as lr_scheduler
 from torch.optim import Optimizer as Optimizer
 from models.fcnn_model import FCnnModel
@@ -8,6 +7,7 @@ from time import time
 from data.data_loader import get_data_loaders
 
 from src.utils.stats_manager import StatsManager
+from src.utils.checkpoint import *
 
 import logging
 
@@ -54,6 +54,7 @@ class Trainer:
         self.print_stats = cfg['print_stats']
         self.epochs = cfg['epochs']
         self.stats = stats_manager
+        self.checkpoint_path = cfg['checkpoint_path']
 
     def train_step(self,
                    epoch: int):
@@ -144,7 +145,7 @@ class Trainer:
             for batch_idx, batch in tqdm(enumerate(self.val_loader)):
                 # Get the slices, labels and weights, then send them to the desired device
                 images = batch['image'].to(self.device).float()
-                labels = batch['labels'].to(self.device).float()
+                labels = batch['labels'].to(self.device)
                 weights = batch['weights'].to(self.device).float()
                 weights_dict = batch['weights_dict'].to(self.device)[1].float()
 
@@ -152,10 +153,10 @@ class Trainer:
                 y_pred = self.model(images)
 
                 # Compute the loss
-                loss, _, _ = self.loss_fn(y_predict=y_pred,
-                                          y=labels,
-                                          weights=weights,
-                                          weights_dict=weights_dict)
+                loss, ce_loss, dice_loss = self.loss_fn(y_pred=y_pred,
+                                                        y_true=labels,
+                                                        weights=weights,
+                                                        weights_dict=weights_dict)
 
                 # Add the running loss
                 eval_loss += loss.item()
@@ -184,17 +185,22 @@ class Trainer:
 
         # Update stats per epoch
         if self.lr_scheduler is None:
-            self.stats.update_epoch_stats(mode='train',
-                                          loss=eval_loss,
-                                          learning_rate=self.cfg['lr'],
-                                          epoch=epoch)
+            dsc = self.stats.update_epoch_stats(mode='val',
+                                                loss=eval_loss,
+                                                learning_rate=self.cfg['lr'],
+                                                epoch=epoch)
         else:
-            self.stats.update_epoch_stats(mode='train',
-                                          loss=eval_loss,
-                                          learning_rate=self.lr_scheduler.get_last_lr()[0],
-                                          epoch=epoch)
+            dsc = self.stats.update_epoch_stats(mode='val',
+                                                loss=eval_loss,
+                                                learning_rate=self.lr_scheduler.get_last_lr()[0],
+                                                epoch=epoch)
+        return dsc
 
     def train(self):
+        # Initialize the best dice score
+        best_dsc = 0.0
+        dsc = 0.0
+
         # Transfer to device
         self.model = self.model.to(self.device)
 
@@ -204,13 +210,38 @@ class Trainer:
 
         # Loop through training and testing steps for a number of epochs
         for epoch in tqdm(range(self.epochs)):
+            # Perform the training step
             self.train_step(epoch)
 
-            # self.eval_step(epoch)
+            # Perform the evaluation step
+            dsc = self.eval_step(epoch)
+
+            # Compare the current dsc with the best dsc
+            if dsc > best_dsc:
+                best_dsc = dsc
+                LOGGER.info(
+                    f"New best checkpoint at epoch {epoch + 1} | DSC: {dsc}\nSaving new best model."
+                )
+                save_checkpoint(path=self.checkpoint_path,
+                                epoch=epoch + 1,
+                                score=dsc,
+                                model=self.model,
+                                optimizer=self.optimizer,
+                                scheduler=self.lr_scheduler,
+                                is_best=True)
 
             # Update the learning rate
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
+
+        # Save the last state of the network
+        save_checkpoint(path=self.checkpoint_path,
+                        epoch=self.cfg['epochs'],
+                        score=dsc,
+                        model=self.model,
+                        optimizer=self.optimizer,
+                        scheduler=self.lr_scheduler,
+                        is_latest=True)
 
         # Stop training
         end_time = time()

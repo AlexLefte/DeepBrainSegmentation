@@ -1,16 +1,7 @@
-import torch
-from torch import nn
-import numpy as np
-import os
-# import rarfile as rar
-import nibabel as nib
-import data
 from data.dataset import *
-from data import data_loader as loader
 from datetime import datetime
 
 from trainer import Trainer
-import models
 from models.fcnn_model import FCnnModel
 from models.loss import CombinedLoss
 from models.loss import Unified_CatFocal_FocalTversky
@@ -34,7 +25,9 @@ if __name__ == '__main__':
     cfg = json.load(open(parent_dir + '/config/config.json', 'r'))
 
     # Data path
-    DATA_PATH = cfg['data_path']
+    BASE_PATH = cfg['base_path']
+    PLANE = cfg['plane']
+    DATA_PATH = BASE_PATH + cfg['data_path']
     EXPERIMENT = cfg['exp_name']
     BATCH_SIZE = cfg['batch_size']
 
@@ -43,12 +36,16 @@ if __name__ == '__main__':
         EXPERIMENT = datetime.now().strftime("%m-%d-%y_%H-%M")
 
     # Setup the logger
-    LOG_PATH = os.path.join(cfg['log_path'], EXPERIMENT + '.log')
+    LOG_PATH = os.path.join(BASE_PATH, cfg['log_path'].format(PLANE), EXPERIMENT + '.log')
     logger.create_logger(LOG_PATH)
 
     # Set up the stats manager
-    SUMMARY_PATH = os.path.join(cfg['summary_path'], EXPERIMENT)
+    SUMMARY_PATH = os.path.join(BASE_PATH, cfg['summary_path'].format(PLANE), EXPERIMENT)
     stats_manager = StatsManager(cfg['num_classes'], SUMMARY_PATH)
+
+    # Set up the checkpoint manager
+    CHECKPOINT_PATH = os.path.join(BASE_PATH, cfg['checkpoint_path'].format(PLANE), EXPERIMENT)
+    cfg['checkpoint_path'] = CHECKPOINT_PATH
 
     # Log the current configuration
     LOGGER = logging.getLogger(__name__)
@@ -65,7 +62,6 @@ if __name__ == '__main__':
     # device = 'cuda' if torch.cuda.is_available() else 'cpu'
     LOGGER.info(f'Device: {device}')
 
-    # # Testing the training loop
     # Initializing the model
     model = FCnnModel(cfg)
 
@@ -79,10 +75,10 @@ if __name__ == '__main__':
     optimizer = get_optimizer(model=model,
                               optimizer='SGD',
                               learning_rate=cfg['lr'])
-    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer,
-    #                                                step_size=cfg['lr_step'],
-    #                                                gamma=cfg['lr_gamma'])
-    lr_scheduler = None
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer,
+                                                   step_size=cfg['lr_step'],
+                                                   gamma=cfg['lr_gamma'])
+    # lr_scheduler = None
 
     # Training
     trainer = Trainer(cfg=cfg,

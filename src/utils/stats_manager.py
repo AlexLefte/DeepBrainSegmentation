@@ -1,10 +1,6 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import torch
-from torch import Tensor
+import os
 from torch.utils.tensorboard import SummaryWriter
 import logging
-from src.utils import logger
 from src.utils.metrics import *
 
 LOGGER = logging.getLogger(__name__)
@@ -29,7 +25,7 @@ class StatsManager:
         Parameters
         ----------
         num_classes: int
-            THe number of classes
+            The number of classes
         path: string
             The experiment's path
         """
@@ -109,6 +105,9 @@ class StatsManager:
         # Reset the prediction/ground truth lists
         self.y_pred = []
         self.y_true = []
+
+        return dice_per_class
+
 
     def update_pr_curves(self):
         # TODO

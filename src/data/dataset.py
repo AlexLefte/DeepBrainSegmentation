@@ -22,7 +22,8 @@ class SubjectsDataset(Dataset):
     def __init__(self,
                  cfg: dict,
                  subjects: list,
-                 mode: str):
+                 mode: str,
+                 weights_dict: list = None):
         """
         Constructor
         """
@@ -51,11 +52,11 @@ class SubjectsDataset(Dataset):
         self.zooms = []  # (X, Y, Z) -> physical dimensions (in mm) of a voxel along each axis
 
         # Weights dictionary
-        self.weights_dict = {} if self.mode == 'train' else None
+        self.weights_dict = {} if self.mode == 'train' else weights_dict
         self.weights = [] if self.mode == 'train' else None
 
         # Get the color look-up tables and right-left dictionary
-        self.lut = du.get_lut(cfg['lut_path'])
+        self.lut = du.get_lut(cfg['base_path'] + cfg['lut_path'])
         self.lut_labels = self.lut["ID"].values if self.plane != 'sagittal' \
             else du.get_sagittal_labels_from_lut(self.lut)
         self.right_left_dict = du.get_right_left_dict(self.lut)
@@ -146,10 +147,9 @@ class SubjectsDataset(Dataset):
         Returns the image data of the patient and the labels.
         Must be implemented.
         """
-        image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
-
         # Apply transforms if they exist
         if self.transform is not None:
+            image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
             image = np.expand_dims(image.T, axis=(0, 3))
             labels = np.expand_dims(labels.T, axis=(0, 3))
             weights = np.expand_dims(weights.T, axis=(0, 3))
@@ -170,9 +170,9 @@ class SubjectsDataset(Dataset):
             labels = torch.squeeze(transform_result['label'].data, dim=(0, -1)).t()
             weights = torch.squeeze(transform_result['weight'].data, dim=(0, -1)).t()
         else:
-            image = torch.Tensor(image)
+            image, labels, weights = self.images[idx], self.labels[idx], torch.ones(self.images[idx].shape)
+            image = torch.Tensor(image).unsqueeze(dim=0)
             labels = torch.Tensor(labels)
-            weights = torch.Tensor(weights)
 
         return {
             'image': image,
