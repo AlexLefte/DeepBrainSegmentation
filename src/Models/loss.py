@@ -290,13 +290,14 @@ class CategoricalFocalLoss(nn.Module):
             bkg_probs = y_pred[:, 0, :, :]
             bkg_ce = ce[:, 0, :, :]
             bkg_loss = (1 - self.alpha) * torch.pow(1 - bkg_probs, self.gamma) * bkg_ce
+            bkg_loss = bkg_loss.unsqueeze(dim=1)
 
             # Compute the foreground loss
             fg_ce = ce[:, 1:, :, :]
             fg_loss = self.alpha * fg_ce
 
             # Stack these losses
-            focal_loss = torch.stack(([bkg_loss, fg_loss]), dim=1)
+            focal_loss = torch.cat(([bkg_loss, fg_loss]), dim=1)
         else:
             # Compute the modulating_factor
             modulating_factor = (1 - y_pred) ** self.gamma
@@ -316,7 +317,7 @@ class FocalTverskyLoss(nn.Module):
     """
     def __init__(self,
                  alpha: float = 0.7,
-                 gamma: float = 4 / 3,
+                 gamma: float = 3 / 4,
                  device: str = 'cpu',
                  eps: float = 0.000001,
                  suppress_bkg: bool = False):
@@ -371,12 +372,12 @@ class FocalTverskyLoss(nn.Module):
         tversky_idxs = tp / (tp + self.alpha * fn + (1 - self.alpha) * fp + self.eps)
 
         if self.suppress_bkg:
-            bkg_tversky = (1 - tversky_idxs[:, 0])
-            fg_tversky = (1 - tversky_idxs[:, 1:]) ** (1 - self.gamma)
-            focal_tversky_loss = torch.stack(([bkg_tversky, fg_tversky]), dim=1)
+            bkg_tversky = (1 - tversky_idxs[0]).unsqueeze(dim=0)
+            fg_tversky = (1 - tversky_idxs[1:]) ** (-self.gamma)
+            focal_tversky_loss = torch.cat(([bkg_tversky, fg_tversky]), dim=0)
         else:
             # Compute the Focal Tversky Loss per class
-            focal_tversky_loss = (1 - tversky_idxs) ** (1 / self.gamma)
+            focal_tversky_loss = (1 - tversky_idxs) ** self.gamma
 
         # Return the average loss
         return torch.mean(focal_tversky_loss)
@@ -408,8 +409,12 @@ class Unified_CatFocal_FocalTversky(nn.Module):
         self.alpha = alpha
         self.lmbd = lmbd
         self.gamma = gamma
-        self.categorical_focal = CategoricalFocalLoss(alpha=alpha, gamma=gamma)
-        self.focal_tverski = FocalTverskyLoss(alpha=alpha, gamma=gamma)
+        self.categorical_focal = CategoricalFocalLoss(alpha=alpha,
+                                                      gamma=gamma,
+                                                      suppress_bkg=True)
+        self.focal_tverski = FocalTverskyLoss(alpha=alpha,
+                                              gamma=gamma,
+                                              suppress_bkg=True)
 
     def forward(self,
                 y_pred: Tensor,

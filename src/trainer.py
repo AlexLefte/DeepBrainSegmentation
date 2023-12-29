@@ -82,12 +82,12 @@ class Trainer:
             y_pred = self.model(images)
 
             # Compute the loss
-            loss, ce_loss, dice_loss = self.loss_fn(y_pred=y_pred,
-                                                    y_true=labels,
-                                                    weights=weights,
-                                                    weights_dict=weights_dict)
-            # loss = self.loss_fn(y_pred=y_pred,
-            #                     y_true=labels)
+            # loss, ce_loss, dice_loss = self.loss_fn(y_pred=y_pred,
+            #                                         y_true=labels,
+            #                                         weights=weights,
+            #                                         weights_dict=weights_dict)
+            loss = self.loss_fn(y_pred=y_pred,
+                                y_true=labels)
 
             # Update the running loss:
             train_loss += loss.item()
@@ -153,10 +153,13 @@ class Trainer:
                 y_pred = self.model(images)
 
                 # Compute the loss
-                loss, ce_loss, dice_loss = self.loss_fn(y_pred=y_pred,
-                                                        y_true=labels,
-                                                        weights=weights,
-                                                        weights_dict=weights_dict)
+                # loss, ce_loss, dice_loss = self.loss_fn(y_pred=y_pred,
+                #                                         y_true=labels,
+                #                                         weights=weights,
+                #                                         weights_dict=weights_dict)
+
+                loss = self.loss_fn(y_pred=y_pred,
+                                    y_true=labels)
 
                 # Add the running loss
                 eval_loss += loss.item()
