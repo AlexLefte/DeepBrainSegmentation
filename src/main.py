@@ -2,10 +2,9 @@ from data.dataset import *
 from datetime import datetime
 
 from trainer import Trainer
-from models.fcnn_model import FCnnModel
-from models.loss import CombinedLoss
-from models.loss import Unified_CatFocal_FocalTversky
-from models.optimizer import get_optimizer
+from src.models.fcnn_model import FCnnModel
+from src.models.loss import *
+from src.models.optimizer import get_optimizer
 
 from utils import logger
 from utils.stats_manager import StatsManager
@@ -70,8 +69,9 @@ if __name__ == '__main__':
     LOGGER.info(f'Number of parameters: {total_params}')
 
     # Initializing the loss & the optimizer
-    loss_fn = CombinedLoss()
-    # loss_fn = Unified_CatFocal_FocalTversky()
+    # loss_fn = CombinedLoss()
+    loss_fn = Unified_CatFocal_FocalTversky()
+    # loss_fn = CategoricalFocalLoss(suppress_bkg=True)
     optimizer = get_optimizer(model=model,
                               optimizer='SGD',
                               learning_rate=cfg['lr'])

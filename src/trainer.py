@@ -1,6 +1,6 @@
 from torch.optim import lr_scheduler as lr_scheduler
 from torch.optim import Optimizer as Optimizer
-from src.fcnn_model import FCnnModel
+from src.models.fcnn_model import FCnnModel
 from tqdm import tqdm
 from time import time
 
