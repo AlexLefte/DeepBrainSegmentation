@@ -272,10 +272,6 @@ class CategoricalFocalLoss(nn.Module):
         y_true_encoded = get_one_hot_encoded(t=y_true,
                                              classes_num=c)
 
-        # Apply softmax
-        y_pred = torch.softmax(input=y_pred,
-                               dim=1)
-
         # Prepare the class weights tensor and the gamma tensor
         # if self.alpha is float:
         #     alpha = torch.ones(c) * self.alpha
@@ -283,7 +279,7 @@ class CategoricalFocalLoss(nn.Module):
         #     self.gamma = torch.ones(c) * self.gamma
 
         # Compute the cross_entropy
-        ce = -y_true_encoded * torch.log(y_pred)
+        ce = -y_true_encoded * torch.log(y_pred + 0.000001)
 
         if self.suppress_bkg:
             # Compute the background loss
@@ -295,6 +291,11 @@ class CategoricalFocalLoss(nn.Module):
             # Compute the foreground loss
             fg_ce = ce[:, 1:, :, :]
             fg_loss = self.alpha * fg_ce
+
+            # print(f'Bg ce: {str(bkg_ce)}, fg ce: {str(fg_ce)}')
+            # bkg_print_loss = torch.mean(torch.sum(bkg_loss, dim=1))
+            # fg_print_loss = torch.mean(torch.sum(fg_loss, dim=1))
+            # print(f'Bg loss: {str(bkg_print_loss)}, fg loss: {str(fg_print_loss)}')
 
             # Stack these losses
             focal_loss = torch.cat(([bkg_loss, fg_loss]), dim=1)
@@ -357,9 +358,6 @@ class FocalTverskyLoss(nn.Module):
         y_true: tensor-like of shape (D, H, W)
             Ground truth
         """
-        # Apply softmax on the raw logits
-        y_pred = torch.softmax(input=y_pred, dim=1)
-
         # Compute the one-hot-encoded version of the ground truth tensor
         y_true_encoded = get_one_hot_encoded(y_true, y_pred.shape[1])
 
@@ -373,7 +371,9 @@ class FocalTverskyLoss(nn.Module):
 
         if self.suppress_bkg:
             bkg_tversky = (1 - tversky_idxs[0]).unsqueeze(dim=0)
-            fg_tversky = (1 - tversky_idxs[1:]) ** (-self.gamma)
+            # print('Bkg tverski loss: ' + str(torch.mean(bkg_tversky)))
+            fg_tversky = (1 - tversky_idxs[1:]) * (1 - tversky_idxs[1:]) ** (-self.gamma)
+            # print('Fg tverski loss: ' + str(torch.mean(fg_tversky)))
             focal_tversky_loss = torch.cat(([bkg_tversky, fg_tversky]), dim=0)
         else:
             # Compute the Focal Tversky Loss per class
@@ -410,7 +410,7 @@ class Unified_CatFocal_FocalTversky(nn.Module):
         self.lmbd = lmbd
         self.gamma = gamma
         self.categorical_focal = CategoricalFocalLoss(alpha=alpha,
-                                                      gamma=gamma,
+                                                      gamma=1/gamma,
                                                       suppress_bkg=True)
         self.focal_tverski = FocalTverskyLoss(alpha=alpha,
                                               gamma=gamma,
@@ -429,6 +429,8 @@ class Unified_CatFocal_FocalTversky(nn.Module):
         y_true: Tensor-like of shape: (D, H, W)
             Labels
         """
+        y_pred = torch.softmax(input=y_pred, dim=1)
+
         cat_focal_loss = self.categorical_focal(y_pred=y_pred,
                                                 y_true=y_true)
         tverski_loss = self.focal_tverski(y_pred=y_pred,
