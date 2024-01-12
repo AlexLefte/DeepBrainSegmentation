@@ -229,6 +229,34 @@ def get_overall_dsc(y_pred: np.ndarray,
     return dice_score
 
 
+def get_cortical_subcortical_class_dsc(y_pred: np.ndarray,
+                                      y_true: np.ndarray,
+                                      num_classes: int):
+    """
+    Returns the overall dice score
+    """
+    # Initialize the intersect and union
+    intersect = []
+    union = []
+
+    for i in range(num_classes):
+        # Get all indexes where class 'i' is found
+        labels_i = (y_true == i).astype(int)
+
+        # Get all indexes for which class 'i' has been predicted
+        preds_i = (y_pred == i).astype(int)
+
+        # Compute the intersection and union
+        intersect.append(np.sum(labels_i * preds_i))
+        union.append(np.sum(labels_i + preds_i))
+
+    # Compute the dice score per class
+    intersect = np.asarray(intersect)
+    union = np.asarray(union)
+    dsc = 2 * (intersect / union)
+    return dsc[1:34], dsc[34:], np.mean(dsc[1:])
+
+
 def get_class_dsc(y_pred: np.ndarray,
                   y_true: np.ndarray,
                   num_classes: int):

@@ -88,10 +88,16 @@ class StatsManager:
         # self.summary_writer.add_figure(f'Dice_matrix/{mode}', dice_matrix, epoch)
 
         # Write the mean dsc (per class)
-        dice_per_class = get_class_dsc(y_pred_flat,
-                                       y_true_flat,
-                                       self.num_classes)
-        self.summary_writer.add_scalar(f'DSC_mean_per_class/{mode}', dice_per_class, epoch)
+        # dice_per_class = get_class_dsc(y_pred_flat,
+        #                                y_true_flat,
+        #                                self.num_classes)
+        dice_sub, dice_cort, dice_mean = get_cortical_subcortical_class_dsc(y_pred_flat,
+                                           y_true_flat,
+                                           self.num_classes)
+        # self.summary_writer.add_scalar(f'DSC_mean_per_class/{mode}', dice_per_class, epoch)
+        self.summary_writer.add_scalar(f'DSC_sub/{mode}', dice_sub, epoch)
+        self.summary_writer.add_scalar(f'DSC_cort/{mode}', dice_cort, epoch)
+        self.summary_writer.add_scalar(f'DSC_mean_per_class/{mode}', dice_mean, epoch)
 
         # Write the current learning rate:
         if mode == 'train':
@@ -99,15 +105,15 @@ class StatsManager:
 
         # Log some info
         mode = str.capitalize(mode)
-        LOGGER.info(f"Epoch: {epoch} | {mode} loss: {loss:.4f} | {mode} dsc: {dice_per_class:.4f} | "
-                    f"{mode} accuracy: {accuracy:.4f}")
+        # LOGGER.info(f"Epoch: {epoch} | {mode} loss: {loss:.4f} | {mode} dsc: {dice_per_class:.4f} | "
+        #             f"{mode} accuracy: {accuracy:.4f}")
 
         # Reset the prediction/ground truth lists
         self.y_pred = []
         self.y_true = []
 
-        return dice_per_class
-
+        # return dice_per_class
+        return dice_mean
 
     def update_pr_curves(self):
         # TODO
