@@ -10,8 +10,8 @@ import nibabel as nib
 from src.data import data_utils as du
 
 
-ORIG = 't1weighted.nii.gz'
-LABELS = 'labels.DKT31.manual+aseg.nii.gz'
+ORIG = 't1weighted_brain.MNI152.nii.gz'
+LABELS = 'labels.DKT31.manual+aseg.MNI152.nii.gz'
 LOGGER = logging.getLogger(__name__)
 
 

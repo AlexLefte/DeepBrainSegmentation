@@ -399,14 +399,15 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
     #     zooms = zooms[:2]
 
     if plane == 'axial':
-        img = img.transpose((1, 0, 2))
+        img = img.transpose((2, 1, 0))
         labels = labels.transpose((1, 0, 2))
         zooms = zooms[1:]
-    elif plane == 'sagittal':
-        img = img.transpose((2, 1, 0))
+    elif plane == 'coronal':
+        img = img.transpose((1, 2, 0))
         labels = labels.transpose((2, 1, 0))
         zooms = zooms[:2]
     else:
+        img = img.transpose((0, 2, 1))
         zooms = zooms[:2]
     return img, zooms, labels
 

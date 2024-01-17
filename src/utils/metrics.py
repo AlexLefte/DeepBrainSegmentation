@@ -254,7 +254,7 @@ def get_cortical_subcortical_class_dsc(y_pred: np.ndarray,
     intersect = np.asarray(intersect)
     union = np.asarray(union)
     dsc = 2 * (intersect / union)
-    return dsc[1:34], dsc[34:], np.mean(dsc[1:])
+    return np.mean(dsc[1:34]), np.mean(dsc[34:]), np.mean(dsc[1:])
 
 
 def get_class_dsc(y_pred: np.ndarray,
