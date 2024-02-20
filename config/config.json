@@ -17,7 +17,7 @@
   "test_data_loader": false,
 
   "preprocessing_modality": "percentiles_&_zscore",
-  "data_padding": "320, 320, 320",
+  "data_padding": "182, 218, 182",
 
   "lr": 0.01,
   "lr_step": 5,
@@ -38,11 +38,11 @@
 
   "in_channels": 1,
   "filters": 64,
-  "kernel_h": 5,
-  "kernel_w": 5,
-  "stride": 1,
-  "pool": 2,
-  "pool_kernel": 1,
+  "kernel_h": 3,
+  "kernel_w": 3,
+  "conv_kernel": 3,
+  "conv_stride": 1,
+  "pool_kernel": 3,
   "pool_stride": 2,
   "classifier_kernel": 1,
   "num_classes": 79,

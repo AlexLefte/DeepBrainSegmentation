@@ -66,17 +66,24 @@ class SubjectsDataset(Dataset):
         for subject in self.subjects:
             # Extract: orig (original images), orig_labels (annotations according to the
             # FreeSurfer convention), zooms (voxel dimensions)
-            img = nib.load(os.path.join(subject, ORIG))
-            img_data = img.get_fdata()
-            zooms = img.header.get_zooms()
-            img_labels = np.asarray(nib.load(os.path.join(subject, LABELS)).get_fdata())
+            try:
+                img = nib.load(os.path.join(subject, ORIG))
+                img_data = img.get_fdata()
+                zooms = img.header.get_zooms()
+                img_labels = np.asarray(nib.load(os.path.join(subject, LABELS)).get_fdata())
+            except Exception as e:
+                print(f'Exception loading: {subject}: {e}')
+                continue
 
             # Transform according to the current plane.
             # Performed prior to removing blank slices.
-            img_data, zooms, new_labels = du.fix_orientation(img_data,
+            img_data, zooms, img_labels = du.fix_orientation(img_data,
                                                              zooms,
                                                              img_labels,
                                                              self.plane)
+
+            if img_data.shape != (218, 182, 182):
+                print(img_data.shape)
 
             # Remove blank slices
             img_data, img_labels = du.remove_blank_slices(images=img_data,
@@ -113,6 +120,7 @@ class SubjectsDataset(Dataset):
         # du.plot_slices(slice_list, 'Before processing')
 
         # Preprocess the data (based on statistics of the entire dataset)
+        # self.images, self.labels = du.preprocess(self.images,
         self.images = du.preprocess(self.images,
                                     self.data_padding)
 
@@ -153,6 +161,9 @@ class SubjectsDataset(Dataset):
             image = np.expand_dims(image.T, axis=(0, 3))
             labels = np.expand_dims(labels.T, axis=(0, 3))
             weights = np.expand_dims(weights.T, axis=(0, 3))
+
+            if image.shape != labels.shape:
+                print("GetItem: Image and labels shapes must be equal.")
 
             # Create the subject dictionary
             subject_dict = {

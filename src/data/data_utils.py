@@ -353,26 +353,98 @@ def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> (n
     current_shape = image.shape
 
     # Initialize padding values to zero
-    padding = [(0, 0), (0, 0)]
+    padding = [(0, 0), (0, 0), (0, 0)]
 
-    # Check if cropping or padding is needed in each dimension
-    for i in range(len(current_shape)):
+    # Initialize the final images
+    orig = np.zeros(target_shape)
+    label = np.zeros(target_shape)
+
+    # Iterate over each dimension
+    for i in range(3):
         if current_shape[i] < target_shape[i]:
             # If the current dimension is smaller than the target, add padding
-            padding[i] = (0, target_shape[i] - current_shape[i])
+            pad_amount = target_shape[i] - current_shape[i]
+            pad_start = pad_amount // 2
+            pad_end = pad_amount - pad_start
+            padding[i] = (pad_start, pad_end)
         elif current_shape[i] > target_shape[i]:
             # If the current dimension is larger than the target, crop the data
             crop_amount = current_shape[i] - target_shape[i]
-            # Calculate how much to crop from each side
             crop_start = crop_amount // 2
-            crop_end = crop_amount - crop_start
-            # Update the padding for this dimension
+            crop_end = current_shape[i] - (crop_amount - crop_start)
             padding[i] = (crop_start, crop_end)
 
     # Pad or crop the original data
-    padded_image = np.pad(image, padding, mode='constant', constant_values=0)
-    padded_labels = np.pad(labels, padding, mode='constant', constant_values=0)
-    return padded_image, padded_labels
+    orig = np.pad(image, padding, mode='constant', constant_values=0)
+    label = np.pad(labels, padding, mode='constant', constant_values=0)
+
+    # # Pad or crop on x-axis
+    # if current_shape[0] < target_shape[0]:
+    #     # If the current dimension is smaller than the target, add padding
+    #     pad_amount = target_shape[0] - current_shape[0]
+    #     pad_start = pad_amount // 2
+    #     pad_end = pad_amount - pad_start
+    #     orig[pad_start:pad_end, :, :] = image
+    #     label[pad_start:pad_end, :, :] = labels
+    # else:
+    #     # If the current dimension is larger than the target, crop the data
+    #     crop_amount = current_shape[0] - target_shape[0]
+    #     crop_start = crop_amount // 2
+    #     crop_end = current_shape[0] - (crop_amount - crop_start)
+    #     orig = image[crop_start:crop_end, :, :]
+    #     label = labels[crop_start:crop_end, :, :]
+    #
+    # # Pad or crop on y-axis
+    # if current_shape[1] < target_shape[1]:
+    #     # If the current dimension is smaller than the target, add padding
+    #     pad_amount = target_shape[1] - current_shape[1]
+    #     pad_start = pad_amount // 2
+    #     pad_end = pad_amount - pad_start
+    #     orig[:, pad_start:pad_end, :] = image
+    #     label[:, pad_start:pad_end, :] = labels
+    # else:
+    #     # If the current dimension is larger than the target, crop the data
+    #     crop_amount = current_shape[1] - target_shape[1]
+    #     crop_start = crop_amount // 2
+    #     crop_end = current_shape[1] - (crop_amount - crop_start)
+    #     orig = image[:, crop_start:crop_end, :]
+    #     label = labels[:, crop_start:crop_end, :]
+    #
+    # # Pad or crop on z-axis
+    # if current_shape[2] < target_shape[2]:
+    #     # If the current dimension is smaller than the target, add padding
+    #     pad_amount = target_shape[2] - current_shape[2]
+    #     pad_start = pad_amount // 2
+    #     pad_end = pad_amount - pad_start
+    #     orig[:, :, pad_start:pad_end] = image
+    #     label[:, :, pad_start:pad_end] = labels
+    # else:
+    #     # If the current dimension is larger than the target, crop the data
+    #     crop_amount = current_shape[2] - target_shape[2]
+    #     crop_start = crop_amount // 2
+    #     crop_end = current_shape[2] - (crop_amount - crop_start)
+    #     orig = image[:, :, crop_start:crop_end]
+    #     label = labels[:, :, crop_start:crop_end]
+
+    # for i in range(len(current_shape)):
+    #     if current_shape[i] < target_shape[i]:
+    #         # If the current dimension is smaller than the target, add padding
+    #         pad_amount = target_shape[i] - current_shape[i]
+    #         pad_start = pad_amount // 2
+    #         pad_end = pad_amount - pad_start
+    #         padding[i] = (pad_start, pad_end)
+    #     elif current_shape[i] > target_shape[i]:
+    #         # If the current dimension is larger than the target, crop the data
+    #         crop_amount = current_shape[i] - target_shape[i]
+    #         crop_start = crop_amount // 2
+    #         crop_end = current_shape[i] - (crop_amount - crop_start)
+    #         padding[i] = (crop_start, crop_end)
+
+    # Pad or crop the original data
+    # padded_image = np.pad(image, padding, mode='constant', constant_values=0)
+    # padded_labels = np.pad(labels, padding, mode='constant', constant_values=0)
+    # return padded_image, padded_labels
+    return orig, label
 
 
 def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
@@ -383,7 +455,7 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
     desired_orientation = orientations.axcodes2ornt('RAS')
 
     # Apply the orientation to the image data
-    img = nib.orientations.apply_orientation(img, desired_orientation)
+    # img = nib.orientations.apply_orientation(img, desired_orientation)
     # zooms = nib.orientations.apply_orientation(zooms, desired_orientation)
     # labels = nib.orientations.apply_orientation(labels, desired_orientation)
 
@@ -410,6 +482,10 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
         img = img.transpose((0, 2, 1))
         labels = labels.transpose((0, 2, 1))
         zooms = zooms[:2]
+
+    if img.shape != labels.shape:
+        print("Image and labels shapes must be equal.")
+
     return img, zooms, labels
 
 
@@ -426,7 +502,7 @@ def preprocess(images: list,
     """
     # 1) Crop or pad
     # for i in range(len(images)):
-    #     images[i], labels[i] = crop_or_pad(images[i], labels[i], padding)
+        # images[i], labels[i] = crop_or_pad(images[i], labels[i], padding)
     #############
 
     # Initialize a transformations list

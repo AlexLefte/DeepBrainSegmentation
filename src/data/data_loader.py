@@ -53,7 +53,8 @@ def get_data_loaders(cfg):
 
     # Creating the custom datasets
     # # Training DataLoader
-    train_set = subject_paths[:train_size]
+    # train_set = subject_paths[:train_size]
+    # TODO: Comment
     train_set = [subject_paths[0]]
     train_dataset = SubjectsDataset(cfg=cfg,
                                     subjects=train_set,
@@ -66,7 +67,8 @@ def get_data_loaders(cfg):
 
     # # Validation DataLoader
     if validation:
-        val_set = subject_paths[train_size: train_size + val_size]
+        # val_set = subject_paths[train_size: train_size + val_size]
+        # TODO: Comment
         val_set = [subject_paths[1]]
         val_dataset = SubjectsDataset(cfg=cfg,
                                       subjects=val_set,

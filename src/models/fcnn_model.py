@@ -22,19 +22,21 @@ class CompetitiveDenseBlock(nn.Module):
     -------
     forward
     """
-    def __init__(self, params: dict, is_input=False, verbose=False):
+    def __init__(self, params: dict, is_input=False, verbose=True):
         super().__init__()
 
         self.is_first = is_input
         in_channels = params["in_channels"]
+        kernel = params["conv_kernel"]
         kernel_h = params["kernel_h"]
         kernel_w = params["kernel_w"]
         filters = params["filters"]
-        stride = params["stride"]
+        stride = params["conv_stride"]
         self.verbose = verbose
 
         # It is important to use padding in order to
         # ensure the output tensor has the same dimensions
+        padding = ((kernel - 1) // 2, (kernel - 1) // 2)
         padding_h = (kernel_h - 1) // 2
         padding_w = (kernel_w - 1) // 2
 
@@ -43,9 +45,9 @@ class CompetitiveDenseBlock(nn.Module):
             nn.BatchNorm2d(in_channels) if is_input else nn.PReLU(),
             nn.Conv2d(in_channels=in_channels,
                       out_channels=filters,
-                      kernel_size=(kernel_h, kernel_w),
+                      kernel_size=(kernel, kernel),
                       stride=stride,
-                      padding=(padding_h, padding_w)),
+                      padding=padding),
             nn.BatchNorm2d(filters)
         )
 
@@ -53,9 +55,9 @@ class CompetitiveDenseBlock(nn.Module):
             nn.PReLU(),
             nn.Conv2d(in_channels=filters,
                       out_channels=filters,
-                      kernel_size=(kernel_h, kernel_w),
+                      kernel_size=(kernel, kernel),
                       stride=stride,
-                      padding=(padding_h, padding_w)),
+                      padding=padding),
             nn.BatchNorm2d(filters)
         )
 
@@ -63,9 +65,9 @@ class CompetitiveDenseBlock(nn.Module):
             nn.PReLU(),
             nn.Conv2d(in_channels=filters,
                       out_channels=filters,
-                      kernel_size=(kernel_h, kernel_w),
+                      kernel_size=(kernel, kernel),
                       stride=stride,
-                      padding=(padding_h, padding_w)),
+                      padding=padding),
             nn.BatchNorm2d(filters)
         )
 
@@ -85,7 +87,7 @@ class CompetitiveDenseBlock(nn.Module):
               |                              ^
               | - - - - - - - - - - - - - - |
         """
-        out0 = torch.maximum(x, self.seq1(x)) if self.is_first else self.seq1(x)
+        out0 = self.seq1(x) if self.is_first else torch.maximum(x, self.seq1(x))
         out1 = torch.maximum(out0, self.seq2(out0))
         out = self.seq3(out1)
 
@@ -107,11 +109,11 @@ class EncodingCDB(CompetitiveDenseBlock):
         """
         Constructor
         """
-        kernel = params["pool"]
+        kernel = params["pool_kernel"]
         stride = params["pool_stride"]
 
         super(EncodingCDB, self).__init__(params=params,
-                                                    is_input=False)
+                                          is_input=False)
 
         # MaxPool2D: https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
         self.max_pool = nn.MaxPool2d(
@@ -151,19 +153,18 @@ class DecodingCDB(CompetitiveDenseBlock):
         """
         super(DecodingCDB, self).__init__(params=params)
 
-        kernel = params["pool"]
-        stride = params["pool_stride"]
-
-        self.max_unpool = nn.MaxUnpool2d(
-            kernel_size=kernel,
-            stride=stride
-        )
+        self.kernel = params["pool_kernel"]
+        self.stride = params["pool_stride"]
 
     def forward(self, x: torch.Tensor, output_block: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
         """
         Forward pass
         """
-        unpool_output = self.max_unpool(x, indices)
+        max_unpool = nn.MaxUnpool2d(
+            kernel_size=self.kernel,
+            stride=self.stride
+        )
+        unpool_output = max_unpool(x, indices, output_size=output_block.shape)
         max_output = torch.maximum(unpool_output, output_block)
         output = super(DecodingCDB, self).forward(max_output)
 
@@ -189,7 +190,7 @@ class ClassifierBlock(nn.Module):
         in_channels = params["in_channels"]
         num_classes = params["num_classes"]
         kernel_size = params["classifier_kernel"]
-        stride = params["stride"]
+        stride = params["conv_stride"]
 
         self.conv2d = nn.Conv2d(in_channels=in_channels,
                                 out_channels=num_classes,
@@ -216,7 +217,7 @@ class FCnnModel(nn.Module):
     ----------
     Encoding blocks: enc1-4
     Bottleneck block: bottleneck
-    Decoding blocks: dec1-4
+    Decoding blocks: dec4-1
     """
 
     def __init__(self,
@@ -238,7 +239,7 @@ class FCnnModel(nn.Module):
         self.enc4 = EncodingCDB(params=params)
 
         # 2. Bottleneck
-        self.bottleneck = CompetitiveDenseBlock(params=params, is_input=False, verbose=False)
+        self.bottleneck = CompetitiveDenseBlock(params=params, is_input=False, verbose=True)
 
         # 3. Defining the decoding sequence:
         self.dec4 = DecodingCDB(params=params)
@@ -275,7 +276,7 @@ class FCnnModel(nn.Module):
         x1, skip1, ind1 = self.enc1(x)
         x2, skip2, ind2 = self.enc2(x1)
         x3, skip3, ind3 = self.enc3(x2)
-        x4, skip4, ind4 = self.enc2(x3)
+        x4, skip4, ind4 = self.enc4(x3)
 
         # 2. Bottleneck
         bottleneck_output = self.bottleneck(x4)

@@ -200,6 +200,15 @@ class Trainer:
         return dsc
 
     def train(self):
+        # try:
+        #     for batch_idx, batch in tqdm(enumerate(self.train_loader)):
+        #         continue
+        # except Exception as e:
+        #     print(f'Exception in for -> {e}')
+        #
+        # print('Finished iterating through the data loader.')
+        # return
+
         # Initialize the best dice score
         best_dsc = 0.0
         dsc = 0.0
