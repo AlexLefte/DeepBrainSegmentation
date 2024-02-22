@@ -101,7 +101,7 @@ class StatsManager:
 
         # Write the current learning rate:
         if mode == 'train':
-            self.summary_writer.add_scalar(f'Learning rate', learning_rate, self.batch_idx)
+            self.summary_writer.add_scalar(f'Learning rate', learning_rate, epoch)
 
         # Log some info
         mode = str.capitalize(mode)

@@ -111,8 +111,12 @@ class SubjectsDataset(Dataset):
         #                   title='Histogram before preprocessing')
 
         if self.mode == 'train':
+            # Get the loss function type
+            loss_fn = cfg['loss_function']
+
             # Compute class weigths
-            self.weights, self.weights_dict = du.compute_weights(self.labels)
+            self.weights, self.weights_dict = du.compute_weights(self.labels,
+                                                                 loss_fn)
 
         # # Plot some slices before processing:
         # indexes = range(110, 150, 10)
@@ -189,5 +193,5 @@ class SubjectsDataset(Dataset):
             'image': image,
             'labels': labels,
             'weights': weights,
-            'weights_dict': torch.tensor(list(self.weights_dict.values()))
+            'weights_list': torch.tensor(list(self.weights_dict.values()))
         }

@@ -22,7 +22,7 @@ class CompetitiveDenseBlock(nn.Module):
     -------
     forward
     """
-    def __init__(self, params: dict, is_input=False, verbose=True):
+    def __init__(self, params: dict, is_input=False, verbose=False):
         super().__init__()
 
         self.is_first = is_input
@@ -239,7 +239,7 @@ class FCnnModel(nn.Module):
         self.enc4 = EncodingCDB(params=params)
 
         # 2. Bottleneck
-        self.bottleneck = CompetitiveDenseBlock(params=params, is_input=False, verbose=True)
+        self.bottleneck = CompetitiveDenseBlock(params=params, is_input=False, verbose=False)
 
         # 3. Defining the decoding sequence:
         self.dec4 = DecodingCDB(params=params)

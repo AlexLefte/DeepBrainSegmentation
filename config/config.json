@@ -27,7 +27,7 @@
 
   "normalize_input": true,
 
-  "loss_function": "dice_loss_&_cross_entropy",
+  "loss_function": "unified_focal_loss",
 
   "epochs": 30,
   "train_epochs": 30,

@@ -1,5 +1,29 @@
 import torch
 from torch import Tensor, nn
+import src.data.data_utils as du
+import numpy as np
+
+
+def get_loss_fn(loss_type: str):
+    """
+    Returns the loss function
+
+    Parameters
+    ----------
+    loss_type: string
+        The loss type
+    """
+    # Initialize the loss function
+    loss_fn = None
+
+    # Choose the loss type accordingly
+    if loss_type == 'dice_loss_&_cross_entropy':
+        loss_fn = CombinedLoss()
+    elif loss_type == 'unified_focal_loss':
+        loss_fn = Unified_CatFocal_FocalTversky()
+
+    # Return loss function
+    return loss_fn
 
 
 def get_one_hot_encoded(t: Tensor,
@@ -139,7 +163,7 @@ class CombinedLoss(nn.Module):
                 y_pred: Tensor,
                 y_true: Tensor,
                 weights: Tensor,
-                weights_dict: Tensor):
+                weights_list: Tensor):
         """
         Computes the composite loss
         """
@@ -149,7 +173,7 @@ class CombinedLoss(nn.Module):
         # See: https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
         cross_entropy_loss = nn.functional.cross_entropy(input=y_pred,
                                                          target=y_true.long(),
-                                                         weight=weights_dict)
+                                                         weight=weights_list)
 
         dice_loss = self.dice_loss(y_pred=y_pred,
                                    y_true=y_true,
@@ -254,7 +278,9 @@ class CategoricalFocalLoss(nn.Module):
 
     def forward(self,
                 y_pred: Tensor,
-                y_true: Tensor):
+                y_true: Tensor,
+                weights: Tensor,
+                weights_list: Tensor):
         """
         Forward method
 
@@ -264,6 +290,10 @@ class CategoricalFocalLoss(nn.Module):
             Prediction logits
         y_true: tensor-like of shape (D, H, W)
             Ground truth
+        weights: Tensor-like of shape: (D, C, H, W)
+            Class weights
+        weights_list: Tensor-like of shape (, 79)
+            Class weights list
         """
         # Get the number of classes
         c = y_pred.shape[1]
@@ -300,14 +330,16 @@ class CategoricalFocalLoss(nn.Module):
             # Stack these losses
             focal_loss = torch.cat(([bkg_loss, fg_loss]), dim=1)
         else:
+            self.alpha = weights
+
             # Compute the modulating_factor
             modulating_factor = (1 - y_pred) ** self.gamma
 
             # Compute the categorical focal loss
-            focal_loss = self.alpha * (modulating_factor * ce)
+            focal_loss = modulating_factor * ce
 
         # Return the mean loss
-        focal_loss = torch.mean(torch.sum(focal_loss, dim=1))
+        focal_loss = torch.mean(self.alpha * torch.sum(focal_loss, dim=1))
         return focal_loss
 
 
@@ -347,7 +379,9 @@ class FocalTverskyLoss(nn.Module):
 
     def forward(self,
                 y_pred: Tensor,
-                y_true: Tensor):
+                y_true: Tensor,
+                weights: Tensor,
+                weights_list: Tensor):
         """
         Forward method
 
@@ -357,6 +391,10 @@ class FocalTverskyLoss(nn.Module):
             Prediction logits
         y_true: tensor-like of shape (D, H, W)
             Ground truth
+        weights: Tensor-like of shape: (D, C, H, W)
+            Class weights
+        weights_list: Tensor-like of shape (, 79)
+            Class weights list
         """
         # Compute the one-hot-encoded version of the ground truth tensor
         y_true_encoded = get_one_hot_encoded(y_true, y_pred.shape[1])
@@ -411,14 +449,16 @@ class Unified_CatFocal_FocalTversky(nn.Module):
         self.gamma = gamma
         self.categorical_focal = CategoricalFocalLoss(alpha=alpha,
                                                       gamma=1/gamma,
-                                                      suppress_bkg=True)
+                                                      suppress_bkg=False)
         self.focal_tverski = FocalTverskyLoss(alpha=alpha,
                                               gamma=gamma,
                                               suppress_bkg=True)
 
     def forward(self,
                 y_pred: Tensor,
-                y_true: Tensor):
+                y_true: Tensor,
+                weights: Tensor,
+                weights_list: Tensor):
         """
         Forward method
 
@@ -428,12 +468,20 @@ class Unified_CatFocal_FocalTversky(nn.Module):
             Prediction logits
         y_true: Tensor-like of shape: (D, H, W)
             Labels
+        weights: Tensor-like of shape: (D, C, H, W)
+            Class weights
+        weights_list: Tensor-like of shape (, 79)
+            Class weights list
         """
         y_pred = torch.softmax(input=y_pred, dim=1)
 
         cat_focal_loss = self.categorical_focal(y_pred=y_pred,
-                                                y_true=y_true)
+                                                y_true=y_true,
+                                                weights=weights,
+                                                weights_list=weights_list)
         tverski_loss = self.focal_tverski(y_pred=y_pred,
-                                          y_true=y_true)
+                                          y_true=y_true,
+                                          weights=weights,
+                                          weights_list=weights_list)
 
         return self.lmbd * cat_focal_loss + (1 - self.lmbd) * tverski_loss

@@ -2,45 +2,51 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import torch.utils.data
 import torchio as tio
 import nibabel.orientations as orientations
-from torchvision import transforms
 import logging
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-def compute_weights(labels: list) -> (list, dict):
+# Class weights
+def compute_weights(labels: list,
+                    loss_fn: str) -> (list, dict):
     """
     Computes the classes weights matrix
 
     Parameters
     ----------
-    labels: np.ndarray
-        image labels
+    labels: list
+        Label arrays list
+    loss_fn: str
+        Loss function type
     """
-    # Initialize the weights list
-    weights_list = []
-
-    # Stacks the labelled slices:
+    # Stack the labelled slices:
     stacked_labels = np.stack(labels, axis=0)
 
-    # Get the unique values in the label matrix
-    unique_classes, count = np.unique(stacked_labels, return_counts=True)
-
-    # Compute the median
-    median_count = np.median(count)
+    # Get the unique values in the label matrix (sorted asc)
+    class_names, class_count = np.unique(stacked_labels, return_counts=True)
 
     # Convert to float type
-    count = np.array(count, dtype=float)
+    class_count = np.array(class_count, dtype=float)
 
-    # Compute the weight for each class and save it into the dictionary
-    for i in range(len(count)):
-        count[i] = float(median_count) / count[i]
+    # Create the weights dictionary
+    weights_dict = dict(zip(class_names, class_count))
 
-    # Create the class weights dictionary
-    weights_dict = dict(zip(unique_classes, count))
+    # Compute the class weights according to the loss function in use
+    if loss_fn == 'unified_focal_loss':
+        # Class weights: within the [0, 1] range
+        # Bkg < 0.5, Fg -> [0.6, 1]
+        weights_dict = compute_non_linear_weights(weights_dict)
+    elif loss_fn == 'combined_loss':
+        # Compute the median frequency balanced weights
+        weights_dict = compute_median_frequency_balanced_weights(weights_dict)
+
+    # Compute weight arrays
+    weights_list = []
 
     # Define a weight ndarray for each training slice
     for label_array in labels:
@@ -49,9 +55,91 @@ def compute_weights(labels: list) -> (list, dict):
 
         # Append the new weight matrix to the collection:
         weights_list.append(weights_array)
+
+    # Return the dictionary
     return weights_list, weights_dict
 
 
+def compute_median_frequency_balanced_weights(class_weights: dict):
+    """
+    Computes median frequency balanced weights
+    """
+    # Compute the median
+    median_count = np.median(class_weights.values())
+
+    # Compute each weight
+    for label, count in class_weights.items():
+        class_weights[label] = float(median_count) / class_weights[label]
+
+    # Return the dictionary
+    return class_weights
+
+
+def compute_non_linear_weights(class_weights: dict,
+                               r: float = 5):
+    """
+    Inverts the classes frequencies and
+
+    Parameters
+    ----------
+    class_weights: dict
+        Class weight dictionary - initially containing the class absolute frequencies
+    r: float
+        Parameter that affects the non-linear transform
+    """
+    # Compute each weight
+    for label, weight in class_weights.items():
+        class_weights[label] = 1 / class_weights[label]
+
+    # Identify the most frequent foreground weight
+    fg_min_weight = min(list(class_weights.values())[1:])
+
+    # Apply a non-linear transformation
+    for label, weight in class_weights.items():
+        if label != 0:
+            class_weights[label] = 1 - (1 - fg_min_weight) * (((1 - class_weights[label]) / (1 - fg_min_weight)) ** r)
+        else:
+            class_weights[0] = 0.1
+
+    # Normalize in range [0.6, 0.9]
+    min_transformed_weight = min(list(class_weights.values())[1:])
+    max_transformed_weight = max(list(class_weights.values())[1:])
+
+    for label, weight in class_weights.items():
+        if label != 0:
+            class_weights[label] = 0.6 + 0.3 * ((class_weights[label] - min_transformed_weight) / (
+                        max_transformed_weight - min_transformed_weight))
+
+    # Return the dictionary
+    return class_weights
+
+
+def normalize_weights(weights_list: np.ndarray,
+                      eps: int = 0.000001):
+    """
+    Normalizes the weights within the [0, 1] range
+
+    Parameters
+    ----------
+    weights_list: np.ndarray
+        Un-normalized class weights
+    eps: float
+        Minimum weight in order to avoid a zero weight for background
+    """
+    # Compute the minimum and maximum weight
+    min_weight = np.min(weights_list)
+    max_weight = np.max(weights_list)
+
+    # Compute the new weight for each class
+    for i in range(len(weights_list)):
+        weights_list[i] = (weights_list[i] + eps - min_weight) / (max_weight - min_weight + eps)
+
+    # Return the result
+    return weights_list
+##########
+
+
+# Labels processing
 def get_labels(labels: np.ndarray,
                lut_labels: list,
                right_left_map: dict,
@@ -92,14 +180,6 @@ def get_labels(labels: np.ndarray,
         # Convert the original labels according to this LUT
         new_labels = np.vectorize(lut_labels_sag.get)(labels)
         return new_labels
-
-
-# def get_labels_from_lut(path: str) -> dict.keys:
-#     """
-#     Get labels from LUT
-#     """
-#     return get_lut(path).keys()
-
 
 def get_labels_from_lut(lut: pd.DataFrame) -> dict.keys:
     """
@@ -159,11 +239,12 @@ def get_sagittal_labels_from_lut(lut: pd.DataFrame) -> list:
     """
     return [lut["ID"][index] for index, name in enumerate(lut["Name"]) \
             if not name.startswith("Left-") and not name.startswith("ctx-lh")]
+######
 
 
 # Data vizualization ###
 def compare_intensity_across_subjects(subjects: list,
-                                     subjects_names: list):
+                                      subjects_names: list):
     # Initialize lists to store intensity statistics for each subject
     mean_intensity_values = []
     std_intensity_values = []

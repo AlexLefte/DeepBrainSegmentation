@@ -1,11 +1,9 @@
+import torch.utils.data
 from torch.optim import lr_scheduler as lr_scheduler
 from torch.optim import Optimizer as Optimizer
 from src.models.fcnn_model import FCnnModel
 from tqdm import tqdm
 from time import time
-
-from data.data_loader import get_data_loaders
-
 from src.utils.stats_manager import StatsManager
 from src.utils.checkpoint import *
 
@@ -32,6 +30,8 @@ class Trainer:
 
     def __init__(self,
                  cfg: dict,
+                 train_loader: torch.utils.data.DataLoader,
+                 val_loader: torch.utils.data.DataLoader,
                  model: FCnnModel,
                  loss_fn: torch.nn.Module,
                  optim: Optimizer,
@@ -46,7 +46,8 @@ class Trainer:
 
         self.cfg = cfg
         self.model = model
-        self.train_loader, self.val_loader, self.test_loader = get_data_loaders(cfg)
+        self.train_loader = train_loader
+        self.val_loader = val_loader
         self.loss_fn = loss_fn
         self.optimizer = optim
         self.lr_scheduler = lr_sch
@@ -73,7 +74,7 @@ class Trainer:
             images = batch['image'].to(self.device).float()
             labels = batch['labels'].to(self.device)
             weights = batch['weights'].to(self.device).float()
-            weights_dict = batch['weights_dict'].to(self.device)[0].float()
+            weights_list = batch['weights_list'].to(self.device).float()
 
             # Zero the gradients before every batch
             self.optimizer.zero_grad()
@@ -82,12 +83,10 @@ class Trainer:
             y_pred = self.model(images)
 
             # Compute the loss
-            # loss, ce_loss, dice_loss = self.loss_fn(y_pred=y_pred,
-            #                                         y_true=labels,
-            #                                         weights=weights,
-            #                                         weights_dict=weights_dict)
             loss = self.loss_fn(y_pred=y_pred,
-                                y_true=labels)
+                                y_true=labels,
+                                weights=weights,
+                                weights_list=weights_list)
 
             # Update the running loss:
             train_loss += loss.item()
@@ -147,19 +146,16 @@ class Trainer:
                 images = batch['image'].to(self.device).float()
                 labels = batch['labels'].to(self.device)
                 weights = batch['weights'].to(self.device).float()
-                weights_dict = batch['weights_dict'].to(self.device)[1].float()
+                weights_list = batch['weights_list'].to(self.device).float()
 
                 # Forward pass
                 y_pred = self.model(images)
 
                 # Compute the loss
-                # loss, ce_loss, dice_loss = self.loss_fn(y_pred=y_pred,
-                #                                         y_true=labels,
-                #                                         weights=weights,
-                #                                         weights_dict=weights_dict)
-
                 loss = self.loss_fn(y_pred=y_pred,
-                                    y_true=labels)
+                                    y_true=labels,
+                                    weights=weights,
+                                    weights_list=weights_list)
 
                 # Add the running loss
                 eval_loss += loss.item()

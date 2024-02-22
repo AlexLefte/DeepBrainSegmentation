@@ -1,6 +1,10 @@
 from data.dataset import *
 from datetime import datetime
 
+from data.data_loader import get_data_loaders
+
+from models.loss import get_loss_fn
+
 from trainer import Trainer
 from src.models.fcnn_model import FCnnModel
 from src.models.loss import *
@@ -68,24 +72,33 @@ if __name__ == '__main__':
     total_params = sum(p.numel() for p in model.parameters())
     LOGGER.info(f'Number of parameters: {total_params}')
 
+    # Create the data loaders
+    train_loader, val_loader, test_loader = get_data_loaders(cfg)
+
     # Initializing the loss & the optimizer
-    # loss_fn = CombinedLoss()
-    loss_fn = Unified_CatFocal_FocalTversky()
-    # loss_fn = CategoricalFocalLoss(suppress_bkg=True)
+    loss_fn = get_loss_fn(cfg['loss_function'])
+
+    # Initialize the optimizer
     optimizer = get_optimizer(model=model,
                               optimizer='SGD',
                               learning_rate=cfg['lr'])
+
+    # Initialize the learning rate scheduler
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer,
                                                    step_size=cfg['lr_step'],
                                                    gamma=cfg['lr_gamma'])
     # lr_scheduler = None
 
-    # Training
+    # Initialize the trainer
     trainer = Trainer(cfg=cfg,
+                      train_loader=train_loader,
+                      val_loader=val_loader,
                       model=model,
                       loss_fn=loss_fn,
                       optim=optimizer,
                       lr_sch=lr_scheduler,
                       stats_manager=stats_manager,
                       device=device)
+
+    # Train
     trainer.train()
