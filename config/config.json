@@ -28,6 +28,7 @@
   "normalize_input": true,
 
   "loss_function": "unified_focal_loss",
+  "optimizer": "ADAM_W",
 
   "epochs": 30,
   "train_epochs": 30,

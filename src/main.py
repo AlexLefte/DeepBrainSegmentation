@@ -79,8 +79,9 @@ if __name__ == '__main__':
     loss_fn = get_loss_fn(cfg['loss_function'])
 
     # Initialize the optimizer
+    optimizer_type = cfg['optimizer']
     optimizer = get_optimizer(model=model,
-                              optimizer='SGD',
+                              optimizer=optimizer_type,
                               learning_rate=cfg['lr'])
 
     # Initialize the learning rate scheduler
