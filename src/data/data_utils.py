@@ -145,8 +145,13 @@ def get_labels(labels: np.ndarray,
                right_left_map: dict,
                plane: str,) -> np.ndarray:
     """
-    Returns the labels in range: 0-95
+    Returns the labels in range: 0-78
     """
+    # Delateralize cortical structures between 2000 & 2099 (that are not included in the LUT)
+    delat_structures = [x for x in range(2000, 2036) if x not in lut_labels]
+    mask = np.isin(labels, delat_structures)
+    labels[mask] -= 1000
+
     # Process the labels: unknown => background
     # labels[labels not in lut_labels] = 0
     # labels = np.where(labels not in lut_labels, 0, labels)
@@ -181,11 +186,24 @@ def get_labels(labels: np.ndarray,
         new_labels = np.vectorize(lut_labels_sag.get)(labels)
         return new_labels
 
+
 def get_labels_from_lut(lut: pd.DataFrame) -> dict.keys:
     """
     Get labels from LUT
     """
     return lut["ID"]
+
+
+def get_lut_from_labels(labels,
+                        lut_labels):
+    # Create a mapping dictionary
+    mapping_dict = {i: float(lut_labels[i]) for i in range(len(lut_labels))}
+
+    # Map the array values to labels using the dictionary
+    mapped_labels = np.vectorize(mapping_dict.get)(labels)
+
+    # Return
+    return mapped_labels
 
 
 def get_right_left_dict(lut: pd.DataFrame) -> dict:
