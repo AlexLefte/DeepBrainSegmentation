@@ -74,7 +74,7 @@ class Trainer:
             images = batch['image'].to(self.device).float()
             labels = batch['labels'].to(self.device)
             weights = batch['weights'].to(self.device).float()
-            weights_list = batch['weights_list'].to(self.device).float()
+            weights_list = batch['weights_list'][0].to(self.device).float()
 
             # Zero the gradients before every batch
             self.optimizer.zero_grad()
@@ -146,7 +146,7 @@ class Trainer:
                 images = batch['image'].to(self.device).float()
                 labels = batch['labels'].to(self.device)
                 weights = batch['weights'].to(self.device).float()
-                weights_list = batch['weights_list'].to(self.device).float()
+                weights_list = batch['weights_list'][0].to(self.device).float()
 
                 # Forward pass
                 y_pred = self.model(images)

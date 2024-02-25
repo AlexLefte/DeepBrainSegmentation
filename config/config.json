@@ -39,9 +39,7 @@
 
   "in_channels": 1,
   "filters": 64,
-  "kernel_h": 3,
-  "kernel_w": 3,
-  "conv_kernel": 3,
+  "conv_kernel": 5,
   "conv_stride": 1,
   "pool_kernel": 3,
   "pool_stride": 2,

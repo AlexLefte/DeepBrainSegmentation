@@ -28,8 +28,6 @@ class CompetitiveDenseBlock(nn.Module):
         self.is_first = is_input
         in_channels = params["in_channels"]
         kernel = params["conv_kernel"]
-        kernel_h = params["kernel_h"]
-        kernel_w = params["kernel_w"]
         filters = params["filters"]
         stride = params["conv_stride"]
         self.verbose = verbose
@@ -37,8 +35,6 @@ class CompetitiveDenseBlock(nn.Module):
         # It is important to use padding in order to
         # ensure the output tensor has the same dimensions
         padding = ((kernel - 1) // 2, (kernel - 1) // 2)
-        padding_h = (kernel_h - 1) // 2
-        padding_w = (kernel_w - 1) // 2
 
         # Defining three distinct structures
         self.seq1 = nn.Sequential(
