@@ -259,7 +259,8 @@ def get_cortical_subcortical_class_dsc(y_pred: np.ndarray,
 
 def get_class_dsc(y_pred: np.ndarray,
                   y_true: np.ndarray,
-                  num_classes: int):
+                  num_classes: int,
+                  return_mean: bool = True):
     """
     Returns the overall dice score
     """
@@ -282,4 +283,7 @@ def get_class_dsc(y_pred: np.ndarray,
     intersect = np.asarray(intersect)
     union = np.asarray(union)
     dsc = 2 * (intersect / union)
-    return np.mean(dsc)
+    if return_mean:
+        return np.mean(dsc)
+    else:
+        return dsc

@@ -105,8 +105,29 @@ class StatsManager:
 
         # Log some info
         mode = str.capitalize(mode)
-        # LOGGER.info(f"Epoch: {epoch} | {mode} loss: {loss:.4f} | {mode} dsc: {dice_per_class:.4f} | "
-        #             f"{mode} accuracy: {accuracy:.4f}")
+        LOGGER.info(f"Epoch: {epoch} | {mode} loss: {loss:.4f} | {mode} dsc: {dice_mean:.4f} | "
+                    f"{mode} accuracy: {accuracy:.4f}")
+
+        # Log info at the end of the training session
+        if epoch == 29:
+            dice_scores = get_class_dsc(y_pred_flat,
+                                        y_true_flat,
+                                        self.num_classes,
+                                        return_mean=False)
+            LOGGER.info(f"{mode} mode DSC results:")
+            for i in range(self.num_classes):
+                LOGGER.info(f"Class {i} dice score: {dice_scores[i]}")
+
+            cf_matr = get_confusion_matrix(y_pred_flat,
+                                           y_true_flat,
+                                           self.num_classes)
+
+            # Convert confusion matrix to Pandas DataFrame
+            conf_matrix_df = pd.DataFrame(cf_matr, index=range(len(cf_matr)),
+                                          columns=range(len(cf_matr[0])))
+
+            # Save DataFrame to CSV file
+            conf_matrix_df.to_csv('confusion_matrix.csv', index=False)
 
         # Reset the prediction/ground truth lists
         self.y_pred = []
