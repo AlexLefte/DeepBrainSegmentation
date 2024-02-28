@@ -183,8 +183,8 @@ class CombinedLoss(nn.Module):
         #                                y_true=y,
         #                                weights=weights)
 
-        return cross_entropy_loss + dice_loss, cross_entropy_loss, dice_loss
-        # return cross_entropy_loss
+        # return cross_entropy_loss + dice_loss, cross_entropy_loss, dice_loss
+        return cross_entropy_loss + dice_loss
 
 
 class DiceLoss2(nn.Module):
