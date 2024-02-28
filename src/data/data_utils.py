@@ -41,7 +41,7 @@ def compute_weights(labels: list,
         # Class weights: within the [0, 1] range
         # Bkg < 0.5, Fg -> [0.6, 1]
         weights_dict = compute_non_linear_weights(weights_dict)
-    elif loss_fn == 'combined_loss':
+    elif loss_fn == 'dice_loss_&_cross_entropy':
         # Compute the median frequency balanced weights
         weights_dict = compute_median_frequency_balanced_weights(weights_dict)
 
