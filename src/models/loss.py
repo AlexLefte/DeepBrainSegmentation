@@ -100,7 +100,7 @@ class DiceLoss(nn.Module):
 
         # Check the weights
         if weights is None:
-            weights = torch.ones(c)
+            weights = torch.ones(c).to(y_pred.device)
 
         # Compute the intersection (numerator)
         intersection = (y_pred * y_true_encoded).sum(dim=0).sum(dim=1).sum(dim=1)

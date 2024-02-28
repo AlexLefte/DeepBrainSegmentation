@@ -65,7 +65,7 @@ def compute_median_frequency_balanced_weights(class_weights: dict):
     Computes median frequency balanced weights
     """
     # Compute the median
-    median_count = np.median(class_weights.values())
+    median_count = np.median(list(class_weights.values()))
 
     # Compute each weight
     for label, count in class_weights.items():

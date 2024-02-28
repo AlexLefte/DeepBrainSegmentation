@@ -6,6 +6,7 @@ from tqdm import tqdm
 from time import time
 from src.utils.stats_manager import StatsManager
 from src.utils.checkpoint import *
+from src.utils.early_stopper import EarlyStopper
 
 import logging
 
@@ -56,6 +57,7 @@ class Trainer:
         self.epochs = cfg['epochs']
         self.stats = stats_manager
         self.checkpoint_path = cfg['checkpoint_path']
+        self.stopper = EarlyStopper(cfg['stopper_max_count'], cfg['stopper_delta'])
 
     def train_step(self,
                    epoch: int):
@@ -193,21 +195,12 @@ class Trainer:
                                                 loss=eval_loss,
                                                 learning_rate=self.lr_scheduler.get_last_lr()[0],
                                                 epoch=epoch)
-        return dsc
+        return eval_loss, dsc
 
     def train(self):
-        # try:
-        #     for batch_idx, batch in tqdm(enumerate(self.train_loader)):
-        #         continue
-        # except Exception as e:
-        #     print(f'Exception in for -> {e}')
-        #
-        # print('Finished iterating through the data loader.')
-        # return
-
         # Initialize the best dice score
         best_dsc = 0.0
-        dsc = 0.0
+        eval_dsc = 0.0
 
         # Transfer to device
         self.model = self.model.to(self.device)
@@ -222,21 +215,26 @@ class Trainer:
             self.train_step(epoch)
 
             # Perform the evaluation step
-            dsc = self.eval_step(epoch)
+            eval_loss, eval_dsc = self.eval_step(epoch)
 
             # Compare the current dsc with the best dsc
-            if dsc > best_dsc:
-                best_dsc = dsc
+            if eval_dsc > best_dsc:
+                best_dsc = eval_dsc
                 LOGGER.info(
-                    f"New best checkpoint at epoch {epoch + 1} | DSC: {dsc}\nSaving new best model."
+                    f"New best checkpoint at epoch {epoch + 1} | DSC: {eval_dsc}\nSaving new best model."
                 )
                 save_checkpoint(path=self.checkpoint_path,
                                 epoch=epoch + 1,
-                                score=dsc,
+                                score=eval_dsc,
                                 model=self.model,
                                 optimizer=self.optimizer,
                                 scheduler=self.lr_scheduler,
                                 is_best=True)
+
+            # Check if validation metrics decreased
+            if self.stopper.stop(eval_loss):
+                LOGGER.info(f"Early stop at epoch: {epoch}.")
+                break
 
             # Update the learning rate
             if self.lr_scheduler is not None:
@@ -245,7 +243,7 @@ class Trainer:
         # Save the last state of the network
         save_checkpoint(path=self.checkpoint_path,
                         epoch=self.cfg['epochs'],
-                        score=dsc,
+                        score=eval_dsc,
                         model=self.model,
                         optimizer=self.optimizer,
                         scheduler=self.lr_scheduler,
