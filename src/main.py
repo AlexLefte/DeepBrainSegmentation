@@ -61,8 +61,8 @@ if __name__ == '__main__':
     # torch.cuda.init()
 
     # Set up the device
-    device = 'cpu'
-    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # device = 'cpu'
     LOGGER.info(f'Device: {device}')
 
     # Initializing the model
