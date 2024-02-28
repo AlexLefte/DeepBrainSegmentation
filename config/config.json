@@ -27,7 +27,7 @@
 
   "normalize_input": true,
 
-  "loss_function": "unified_focal_loss",
+  "loss_function": "dice_loss_&_cross_entropy",
   "optimizer": "ADAM_W",
 
   "epochs": 30,
@@ -48,5 +48,8 @@
   "device": "cpu",
 
   "print_stats": 10,
-  "resume_training": false
+  "resume_training": false,
+
+  "stopper_max_count": 5,
+  "stopper_delta": 0.2
 }
