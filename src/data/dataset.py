@@ -11,6 +11,7 @@ from src.data import data_utils as du
 
 
 ORIG = 't1weighted_brain.MNI152.nii.gz'
+ORIG = 't1weighted.MNI152.nii.gz'
 LABELS = 'labels.DKT31.manual+aseg.MNI152.nii.gz'
 LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ class SubjectsDataset(Dataset):
             try:
                 img = nib.load(os.path.join(subject, ORIG))
                 img_data = img.get_fdata()
+                img_data = np.asarray(img_data, dtype=np.uint8)
                 zooms = img.header.get_zooms()
                 img_labels = np.asarray(nib.load(os.path.join(subject, LABELS)).get_fdata())
             except Exception as e:
@@ -188,6 +190,10 @@ class SubjectsDataset(Dataset):
             image, labels, weights = self.images[idx], self.labels[idx], torch.ones(self.images[idx].shape)
             image = torch.Tensor(image).unsqueeze(dim=0)
             labels = torch.Tensor(labels)
+
+        # Normalize the slice's values
+        image /= image.max()
+        image = image.clip(0.0, 1.0)
 
         return {
             'image': image,

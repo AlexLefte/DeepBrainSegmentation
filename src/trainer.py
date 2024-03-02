@@ -1,3 +1,4 @@
+import numpy as np
 import torch.utils.data
 from torch.optim import lr_scheduler as lr_scheduler
 from torch.optim import Optimizer as Optimizer
@@ -7,6 +8,8 @@ from time import time
 from src.utils.stats_manager import StatsManager
 from src.utils.checkpoint import *
 from src.utils.early_stopper import EarlyStopper
+from src.utils.nifti import save_nifti
+from src.data import data_utils as du
 
 import logging
 
@@ -33,6 +36,7 @@ class Trainer:
                  cfg: dict,
                  train_loader: torch.utils.data.DataLoader,
                  val_loader: torch.utils.data.DataLoader,
+                 test_loader: torch.utils.data.DataLoader,
                  model: FCnnModel,
                  loss_fn: torch.nn.Module,
                  optim: Optimizer,
@@ -49,6 +53,7 @@ class Trainer:
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
+        self.test_loader = test_loader
         self.loss_fn = loss_fn
         self.optimizer = optim
         self.lr_scheduler = lr_sch
@@ -198,6 +203,9 @@ class Trainer:
         return eval_loss, dsc
 
     def train(self):
+        """
+        Train method
+        """
         # Initialize the best dice score
         best_dsc = 0.0
         eval_dsc = 0.0
@@ -253,3 +261,62 @@ class Trainer:
         end_time = time()
         LOGGER.info(f"==== Stopped training. Total training time: {end_time - start_time:.3f} seconds ===="
                     f"\n===========================================")
+
+    def test(self):
+        """
+        Test method
+        """
+        # For now we just want to see some results
+        # TODO: Define the test method accordingly
+        y_pred_list = []
+        y_true_list = []
+
+        # Set up a loss list
+        test_loss = 0
+
+        # Set up the model to eval mode
+        self.model.eval()
+
+        # Turn on the inference mode
+        with torch.inference_mode():
+            # Loop through the data loader
+            for batch_idx, batch in tqdm(enumerate(self.test_loader)):
+                # Get the slices, labels and weights, then send them to the desired device
+                images = batch['image'].to(self.device).float()
+                labels = batch['labels'].to(self.device)
+                weights = batch['weights'].to(self.device).float()
+                weights_list = batch['weights_list'][0].to(self.device).float()
+
+                # Forward pass
+                y_pred = self.model(images)
+
+                # Compute the loss
+                loss = self.loss_fn(y_pred=y_pred,
+                                    y_true=labels,
+                                    weights=weights,
+                                    weights_list=weights_list)
+
+                # Add the running loss
+                test_loss += loss.item()
+
+                # Apply argmax over the prediction tensor
+                y_pred_class = torch.argmax(y_pred, dim=1)
+
+                # Extend the prediction array
+                y_pred_list.extend(y_pred_class.cpu().numpy())
+
+        # Compute the mean loss / epoch
+        test_loss /= len(self.test_loader)
+
+        # Log the loss
+        LOGGER.info(f'Test loss on subject: {test_loss}')
+
+        # Save the resulting prediction as a NIfTI file
+        lut = du.get_lut(self.cfg['base_path'] + self.cfg['lut_path'])
+        lut_labels = lut["ID"].values
+        prediction_array = np.stack(y_pred_list, axis=0)
+        prediction_array = du.get_lut_from_labels(prediction_array,
+                                                  lut_labels)
+        output_path = 'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/02.02.2024/test_output_mri.nii'
+        save_nifti(prediction_array,
+                   output_path)

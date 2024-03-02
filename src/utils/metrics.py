@@ -185,7 +185,14 @@ def get_confusion_matrix(y_pred: np.ndarray,
     """
     Returns the confusion matrix
     """
-    return confusion_matrix(y_true, y_pred, labels=np.asarray(range(num_classes)))
+    # Compute the confusion matrix
+    cm = confusion_matrix(y_true, y_pred, labels=np.asarray(range(num_classes)))
+
+    # Normalize
+    cm /= np.sum(cm, axis=1).reshape(-1, 1)
+
+    # Return the normalized matrix
+    return cm
 
 
 def get_cnf_matrix_figure(y_pred: np.ndarray,

@@ -418,17 +418,17 @@ def remove_blank_slices(images: np.ndarray,
     labels:
         the labeled volume
     threshold:
-        the minimum sum a slice has to accomplish in order to be kept
+        the minimum number of foreground pixels a slice has to accomplish in order to be kept
 
     Returns
     -------
     The volumes without those slices that do not meet the requirements
     """
     # Compute the sums of the labels for each slice
-    slices_sums = np.sum(labels, axis=(1, 2))
+    slices_nonzero_counts = np.count_nonzero(labels, axis=(1, 2))
 
     # Select those slices with at least 20 voxels different from background
-    selected_slices = np.where(slices_sums > threshold)
+    selected_slices = np.where(slices_nonzero_counts > threshold)
 
     # # Plot some blank slices:
     # unselected_slices = np.where(slices_sums <= threshold)

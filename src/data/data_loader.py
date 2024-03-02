@@ -81,7 +81,13 @@ def get_data_loaders(cfg):
 
     # # Test DataLoader
     if test:
-        test_set = subject_paths[train_size + val_size:]
+        # test_set = subject_paths[train_size + val_size:]
+        # For testing purposes, the test dataloader will be composed of a training subject,
+        # to see how the network performs
+        # TODO: remove this afterwards
+        test_set = [train_set[0]]
+        test_subject_name = train_set[0].split('\\')[1]
+        LOGGER.info(f'Test subject: {test_subject_name}')
         test_dataset = SubjectsDataset(cfg=cfg,
                                        subjects=test_set,
                                        mode='test',
