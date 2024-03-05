@@ -430,12 +430,6 @@ def remove_blank_slices(images: np.ndarray,
     # Select those slices with at least 20 voxels different from background
     selected_slices = np.where(slices_nonzero_counts > threshold)
 
-    # # Plot some blank slices:
-    # unselected_slices = np.where(slices_sums <= threshold)
-    # for i in unselected_slices[0][0::5]:
-    #     plt.figure(), plt.imshow(images[i, :, :], cmap='gray')
-    #     plt.show()
-
     # Return the selected slices
     return images[selected_slices], labels[selected_slices]
 
@@ -548,7 +542,8 @@ def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> (n
 
 def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
     """
-    Permutes the axis depending on the plane
+    Permutes the axis depending on the plane to ensure the same orientation
+    is respected (assuming the scan si aligned to MNI152)
     """
     # Specify the orientation that matches the desired anatomical orientation (e.g., RAS)
     desired_orientation = orientations.axcodes2ornt('RAS')
@@ -557,17 +552,6 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
     # img = nib.orientations.apply_orientation(img, desired_orientation)
     # zooms = nib.orientations.apply_orientation(zooms, desired_orientation)
     # labels = nib.orientations.apply_orientation(labels, desired_orientation)
-
-    # if plane == 'axial':
-    #     img = np.moveaxis(img, [0, 1, 2], [1, 0, 2])
-    #     labels = np.moveaxis(labels, [0, 1, 2], [1, 0, 2])
-    #     zooms = zooms[1:]
-    # elif plane == 'sagittal':
-    #     img = np.moveaxis(img, [0, 1, 2], [2, 1, 0])
-    #     labels = np.moveaxis(labels, [0, 1, 2], [2, 1, 0])
-    #     zooms = zooms[:2]
-    # else:
-    #     zooms = zooms[:2]
 
     if plane == 'axial':
         img = img.transpose((2, 1, 0))
@@ -588,9 +572,9 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
     return img, zooms, labels
 
 
-def preprocess(images: list,
-               padding: list = (320, 320, 320),
-               mode: str = 'percentiles_&_zscore'):
+def preprocess_dataset(images: list,
+                       padding: list = (320, 320, 320),
+                       mode: str = 'percentiles_&_zscore'):
     """
     Performs cropping, normalization, followed by augmentation.
     1) Crop or pad:
@@ -613,6 +597,7 @@ def preprocess(images: list,
     # 3) Apply transformations:
     # Stack all images into a single 3D array
     stacked_images = np.stack(images, axis=0)
+    initial = np.copy(stacked_images)
     stacked_images = np.expand_dims(stacked_images, axis=0)
 
     # Create a TorchIO ScalarImage instance
@@ -625,11 +610,59 @@ def preprocess(images: list,
     # Retrieve the transformed NumPy array
     transformed_image_array = image.data.numpy()
 
-    # Split the transformed array back into individual images
+    # Split the transformed array back into individual slices
     transformed_image_array = np.squeeze(transformed_image_array)
+
+    # Save the result as a NIfTI
+    # plt.figure()
+    # plt.title('Transformed')
+    # plt.imshow(transformed_image_array[100, :, :], origin='lower', cmap='gray')
+    # plt.show()
+    # plt.figure()
+    # plt.title('Original')
+    # plt.imshow(initial[100, :, :], origin='lower', cmap='gray')
+    # plt.show()
+    # nifti_img = nib.Nifti1Image(transformed_image_array, affine=np.eye(4))
+    # output_path = 'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/23.02.2024/output_mri.nii'
+    # nib.save(nifti_img, output_path)
+
     transformed_images = [np.squeeze(image) for image in np.split(transformed_image_array, len(images), axis=0)]
 
     return transformed_images
+
+
+def preprocess_subject(image: np.ndarray,
+                       padding=(320, 320, 320)):
+    """
+    Performs cropping, normalization, followed by augmentation.
+    1) Crop or pad:
+        - Set a standard input size.
+        - If data shape is above the standard size => crop
+        - If data shape is below the standard size => pad
+    2) Normalization:
+    """
+    # 1) Crop or pad
+    # TODO
+
+    # Initialize a transformations list
+    transforms_list = []
+
+    # 2) Normalize
+    transforms_list.extend(get_norm_transforms())
+
+    # 3) Apply transformations:
+    # Create a TorchIO ScalarImage instance
+    image = np.expand_dims(image, axis=0)
+    image = tio.ScalarImage(tensor=image)
+
+    # Apply each transformation
+    for transform in transforms_list:
+        image = transform(image)
+
+    # Retrieve the transformed NumPy array
+    transformed_image_array = image.data.numpy()
+
+    return np.squeeze(transformed_image_array, axis=0)
 
 
 def get_norm_transforms(mode: str = 'percentiles_&_zscore') -> (np.ndarray, np.ndarray):
@@ -659,6 +692,8 @@ def get_norm_transforms(mode: str = 'percentiles_&_zscore') -> (np.ndarray, np.n
         # Append the RescaleIntensity and ZNormalization transforms
         transforms_list.append(tio.RescaleIntensity(percentiles=(0.5, 99.5)))
         transforms_list.append(tio.ZNormalization())
+    elif mode == 'zscore':
+        transforms_list.append(tio.ZNormalization())
     # elif mode == 'log_norm_&_zscore':
     #     # Append the ZNormalization transform
     #     transforms_list.append(tio.ZNormalization())
@@ -672,56 +707,79 @@ def get_norm_transforms(mode: str = 'percentiles_&_zscore') -> (np.ndarray, np.n
     return transforms_list
 
 
-def get_aug_transforms():
+def get_aug_transforms(data_augmentation: str):
     """
     Provides data augmentation transforms
     See U-net paper:  https://arxiv.org/pdf/1809.10486.pdf (section Data Augmentation)
     See TorchIO -> Transforms -> Augmentation: https://torchio.readthedocs.io/transforms/augmentation.html
     """
+    # Check if any augmentation method is needed
+    if data_augmentation is None:
+        return None
 
-    # Append: rotation -> scaling -> translation -> elastic deformation -> gamma correction
-    return tio.Compose([
-        tio.RandomAffine(
-            scales=(1.0, 1.0),
-            degrees=10,
-            translation=(0, 0, 0),
-            isotropic=True,
-            center='image',
-            default_pad_value='minimum',
-            image_interpolation='linear',
-            include=['img', 'label', 'weight'],
-        ),
-        tio.RandomAffine(
-            scales=(0.8, 1.15),
-            degrees=0,
-            translation=(0, 0, 0),
-            isotropic=True,
-            center='image',
-            default_pad_value='minimum',
-            image_interpolation='linear',
-            include=['img', 'label', 'weight'],
-        ),
-        tio.RandomAffine(
-            scales=(1.0, 1.0),
-            degrees=0,
-            translation=(15.0, 15.0, 0),
-            isotropic=True,
-            center="image",
-            default_pad_value="minimum",
-            image_interpolation="linear",
-            include=["img", "label", "weight"]
-        ),
-        # tio.RandomElasticDeformation(
-        #     num_control_points=7,
-        #     max_displacement=15,
-        #     locked_borders=4,
-        #     image_interpolation='linear',
-        #     include=['img', 'label', 'weight'],
-        # ),
-        tio.transforms.RandomGamma(
-            log_gamma=(-0.3, 0.3), include=['img']
-        )]
-    )
+    # Get the augmentation list
+    augs = data_augmentation.split(',')
+
+    # Transforms list
+    transform_list = []
+
+    # Append each transform
+    for aug in augs:
+        if aug == 'Rotation':
+            transform_list.append(
+                tio.RandomAffine(
+                    scales=(1.0, 1.0),
+                    degrees=10,
+                    translation=(0, 0, 0),
+                    isotropic=True,
+                    center='image',
+                    default_pad_value='minimum',
+                    image_interpolation='linear',
+                    include=['img', 'label', 'weight'],
+                ))
+        elif aug == 'Scaling':
+            transform_list.append(
+                tio.RandomAffine(
+                    scales=(0.8, 1.15),
+                    degrees=0,
+                    translation=(0, 0, 0),
+                    isotropic=True,
+                    center='image',
+                    default_pad_value='minimum',
+                    image_interpolation='linear',
+                    include=['img', 'label', 'weight'],
+                )
+            )
+        elif aug == 'Translation':
+            transform_list.append(
+                tio.RandomAffine(
+                    scales=(1.0, 1.0),
+                    degrees=0,
+                    translation=(15.0, 15.0, 0),
+                    isotropic=True,
+                    center="image",
+                    default_pad_value="minimum",
+                    image_interpolation="linear",
+                    include=["img", "label", "weight"]
+                )
+            )
+        elif aug == 'Gamma':
+            transform_list.append(
+                tio.transforms.RandomGamma(
+                    log_gamma=(-0.3, 0.3), include=['img']
+                )
+            )
+
+    # Return
+    return tio.Compose(transform_list)
+
+
+def get_thick_slices(img_data,
+                     slice_thickness: int = 3):
+    """
+    Creates a sliding window view into the volume with the given slice thickness.
+    """
+    return np.lib.stride_tricks.sliding_window_view(img_data, slice_thickness, axis=0)
 ####################
 
 

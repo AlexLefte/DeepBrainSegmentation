@@ -94,6 +94,7 @@ if __name__ == '__main__':
     trainer = Trainer(cfg=cfg,
                       train_loader=train_loader,
                       val_loader=val_loader,
+                      test_loader=test_loader,
                       model=model,
                       loss_fn=loss_fn,
                       optim=optimizer,

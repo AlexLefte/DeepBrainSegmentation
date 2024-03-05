@@ -109,7 +109,7 @@ class EncodingCDB(CompetitiveDenseBlock):
         stride = params["pool_stride"]
 
         super(EncodingCDB, self).__init__(params=params,
-                                          is_input=False)
+                                          is_input=is_input)
 
         # MaxPool2D: https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
         self.max_pool = nn.MaxPool2d(

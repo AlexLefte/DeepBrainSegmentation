@@ -3,6 +3,9 @@ from torch import Tensor, nn
 import src.data.data_utils as du
 import numpy as np
 
+from torch.nn.modules.loss import _Loss
+from torch.nn import functional as F
+
 
 def get_loss_fn(loss_type: str):
     """
@@ -18,7 +21,8 @@ def get_loss_fn(loss_type: str):
 
     # Choose the loss type accordingly
     if loss_type == 'dice_loss_&_cross_entropy':
-        loss_fn = CombinedLoss()
+        # loss_fn = CombinedLoss()
+        loss_fn = TestCombinedLoss()
     elif loss_type == 'unified_focal_loss':
         loss_fn = Unified_CatFocal_FocalTversky()
 
@@ -485,3 +489,163 @@ class Unified_CatFocal_FocalTversky(nn.Module):
                                           weights_list=weights_list)
 
         return self.lmbd * cat_focal_loss + (1 - self.lmbd) * tverski_loss
+
+
+class TestDiceLoss(_Loss):
+    """Calculate Dice Loss.
+
+    Methods
+    -------
+    forward
+        Calulate the DiceLoss
+    """
+    def forward(
+            self,
+            output: Tensor,
+            target: Tensor,
+            weights=None,
+            ignore_index=None
+    ) -> float:
+        """Calulate the DiceLoss.
+
+        Parameters
+        ----------
+        output : Tensor
+            N x C x H x W Variable
+        target : Tensor
+            N x C x W LongTensor with starting class at 0
+        weights : Optional[int]
+            C FloatTensor with class wise weights(Default value = None)
+        ignore_index : Optional[int]
+            ignore label with index x in the loss calculation (Default value = None)
+
+        Returns
+        -------
+        float
+            Calculated Diceloss
+
+        """
+        eps = 0.001
+
+        encoded_target = output.detach() * 0
+
+        if ignore_index is not None:
+            mask = target == ignore_index
+            target = target.clone()
+            target[mask] = 0
+            encoded_target.scatter_(1, target.unsqueeze(1), 1)
+            mask = mask.unsqueeze(1).expand_as(encoded_target)
+            encoded_target[mask] = 0
+
+        else:
+            encoded_target.scatter_(1, target.unsqueeze(1), 1)
+
+        if weights is None:
+            weights = 1
+
+        intersection = output * encoded_target
+        numerator = 2 * intersection.sum(0).sum(1).sum(1)
+        denominator = output + encoded_target
+
+        if ignore_index is not None:
+            denominator[mask] = 0
+
+        denominator = denominator.sum(0).sum(1).sum(1) + eps
+        loss_per_channel = weights * (
+                1 - (numerator / denominator)
+        )  # Channel-wise weights
+
+        return loss_per_channel.sum() / output.size(1)
+
+
+class TestCrossEntropy2D(nn.Module):
+    """2D Cross-entropy loss implemented as negative log likelihood.
+
+    Attributes
+    ----------
+    nll_loss
+        calculated cross-entropy loss
+
+    Methods
+    -------
+    forward
+        returns calculated cross entropy
+    """
+
+    def __init__(self, weight=None, reduction: str = "none"):
+        """Construct CrossEntropy2D object.
+
+        Parameters
+        ----------
+        weight : Optional[Tensor]
+            a manual rescaling weight given to each class. If given, has to be a Tensor of size `C`. Defaults to None
+        reduction : str
+            Specifies the reduction to apply to the output, as in nn.CrossEntropyLoss. Defaults to 'None'
+
+        """
+        super(TestCrossEntropy2D, self).__init__()
+        self.nll_loss = nn.CrossEntropyLoss(weight=weight, reduction=reduction)
+        print(
+            f"Initialized {self.__class__.__name__} with weight: {weight} and reduction: {reduction}"
+        )
+
+    def forward(self, inputs, targets):
+        """Feedforward."""
+        return self.nll_loss(inputs, targets)
+
+
+class TestCombinedLoss(nn.Module):
+    """For CrossEntropy the input has to be a long tensor.
+
+    Attributes
+    ----------
+    cross_entropy_loss
+        Results of cross entropy loss
+    dice_loss
+        Results of dice loss
+    weight_dice
+        Weight for dice loss
+    weight_ce
+        Weight for float
+    """
+
+    def __init__(self, weight_dice=1, weight_ce=1):
+        """Construct CobinedLoss object.
+
+        Parameters
+        ----------
+        weight_dice : Real
+            Weight for dice loss. Defaults to 1
+        weight_ce : Real
+            Weight for cross entropy loss. Defaults to 1
+
+        """
+        super(TestCombinedLoss, self).__init__()
+        self.cross_entropy_loss = TestCrossEntropy2D()
+        self.dice_loss = TestDiceLoss()
+        self.weight_dice = weight_dice
+        self.weight_ce = weight_ce
+
+    def forward(
+            self,
+            y_pred: Tensor,
+            y_true: Tensor,
+            weights: Tensor,
+            weights_list: Tensor):
+        # Typecast to long tensor --> labels are bytes initially (uint8),
+        # index operations require LongTensor in pytorch
+        y_true = y_true.type(torch.LongTensor)
+        # Due to typecasting above, target needs to be shifted to gpu again
+        if y_pred.is_cuda:
+            y_true = y_true.cuda()
+
+        input_soft = F.softmax(y_pred, dim=1)  # Along Class Dimension
+        dice_val = torch.mean(self.dice_loss(input_soft, y_true))
+        ce_val = torch.mean(
+            torch.mul(self.cross_entropy_loss.forward(y_pred, y_true), weights)
+        )
+        total_loss = torch.add(
+            torch.mul(dice_val, self.weight_dice), torch.mul(ce_val, self.weight_ce)
+        )
+
+        return total_loss

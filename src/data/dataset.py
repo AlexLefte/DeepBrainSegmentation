@@ -10,7 +10,6 @@ import nibabel as nib
 from src.data import data_utils as du
 
 
-ORIG = 't1weighted_brain.MNI152.nii.gz'
 ORIG = 't1weighted.MNI152.nii.gz'
 LABELS = 'labels.DKT31.manual+aseg.MNI152.nii.gz'
 LOGGER = logging.getLogger(__name__)
@@ -36,7 +35,7 @@ class SubjectsDataset(Dataset):
         self.mode = mode
 
         # Get the appropriate transformation list
-        self.transform = du.get_aug_transforms() if mode == 'train' else None
+        self.transform = du.get_aug_transforms(cfg['data_augmentation']) if mode == 'train' else None
 
         # Get plane
         self.plane = cfg['plane']
@@ -46,6 +45,9 @@ class SubjectsDataset(Dataset):
 
         # Get data padding:
         self.data_padding = [int(x) for x in cfg['data_padding'].split(',')]
+
+        # Get slice thickness
+        self.slice_thickness = cfg['slice_thickness']
 
         # Lists for images, labels, label weights, and zooms
         self.images = []
@@ -70,7 +72,7 @@ class SubjectsDataset(Dataset):
             try:
                 img = nib.load(os.path.join(subject, ORIG))
                 img_data = img.get_fdata()
-                img_data = np.asarray(img_data, dtype=np.uint8)
+                # img_data = np.asarray(img_data, dtype=np.uint8)
                 zooms = img.header.get_zooms()
                 img_labels = np.asarray(nib.load(os.path.join(subject, LABELS)).get_fdata())
             except Exception as e:
@@ -84,8 +86,18 @@ class SubjectsDataset(Dataset):
                                                              img_labels,
                                                              self.plane)
 
-            if img_data.shape != (218, 182, 182):
-                print(img_data.shape)
+            # Preprocess the data (based on statistics of the entire dataset)
+            # self.images, self.labels = du.preprocess(self.images,
+            img_data = du.preprocess_subject(img_data,
+                                             self.data_padding)
+
+            # Create an MRI slice window => (D, slice_thickness, H, W)
+            if self.slice_thickness > 1:
+                img_data = du.get_thick_slices(img_data,
+                                               self.slice_thickness)
+                img_data = img_data.transpose((0, 3, 1, 2))
+            else:
+                img_data = np.expand_dims(img_data, axis=1)
 
             # Remove blank slices
             img_data, img_labels = du.remove_blank_slices(images=img_data,
@@ -97,49 +109,32 @@ class SubjectsDataset(Dataset):
                                        right_left_map=self.right_left_dict,
                                        plane=self.plane)
 
+            # Saved the transformed labels
+            # save_labels = du.get_lut_from_labels(new_labels,
+            #                                      self.lut_labels)
+            # nifti_img = nib.Nifti1Image(save_labels, affine=np.eye(4))
+            # head, subject_name = os.path.split(subject)
+            # output_path = ('C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/23.02.2024/' +
+            #                subject_name + '.nii')
+            # nib.save(nifti_img, output_path)
+
             # Append the new subject to the dataset
             self.images.extend(img_data)
             self.labels.extend(new_labels)
             self.zooms.extend((zooms, ) * img_data.shape[0])
 
-        # Check the intensity statistics across the dataset (before preprocessing)
-        # du.compare_intensity_across_subjects(self.images,
-        #                                     self.subjects)
-        # print("Statistics before preprocessing: ")
-        # Stack the slices along a new axis (axis=0)
-        # stacked_slices = np.stack(self.images, axis=0)
-        # du.compare_intensity_across_dataset(stacked_slices)
-        # du.plot_histogram(data=stacked_slices,
-        #                   title='Histogram before preprocessing')
-
         if self.mode == 'train':
             # Get the loss function type
             loss_fn = cfg['loss_function']
 
-            # Compute class weigths
+            # Compute class weights
             self.weights, self.weights_dict = du.compute_weights(self.labels,
                                                                  loss_fn)
 
-        # # Plot some slices before processing:
-        # indexes = range(110, 150, 10)
-        # slice_list = [self.images[i] for i in range(len(self.images)) if i in indexes]
-        # du.plot_slices(slice_list, 'Before processing')
-
         # Preprocess the data (based on statistics of the entire dataset)
         # self.images, self.labels = du.preprocess(self.images,
-        self.images = du.preprocess(self.images,
-                                    self.data_padding)
-
-        # Check the intensity statistics across the dataset (after preprocessing)
-        # print("\nStatistics after preprocessing: ")
-        # stacked_slices = np.stack(self.images, axis=0)
-        # du.compare_intensity_across_dataset(stacked_slices)
-        # du.plot_histogram(data=stacked_slices,
-        #                   title='Histogram after preprocessing')
-
-        # # Plot some slices after processing:
-        # slice_list = [self.images[i] for i in range(len(self.images)) if i in indexes]
-        # du.plot_slices(slice_list, 'After processing')
+        # self.images = du.preprocess(self.images,
+        #                             self.data_padding)
 
         # Get the length of our Dataset
         self.count = len(self.images)
@@ -164,12 +159,9 @@ class SubjectsDataset(Dataset):
         # Apply transforms if they exist
         if self.transform is not None:
             image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
-            image = np.expand_dims(image.T, axis=(0, 3))
-            labels = np.expand_dims(labels.T, axis=(0, 3))
-            weights = np.expand_dims(weights.T, axis=(0, 3))
-
-            if image.shape != labels.shape:
-                print("GetItem: Image and labels shapes must be equal.")
+            image = np.expand_dims(image, axis=3)
+            labels = np.expand_dims(labels, axis=(0, 3))
+            weights = np.expand_dims(weights, axis=(0, 3))
 
             # Create the subject dictionary
             subject_dict = {
@@ -183,12 +175,15 @@ class SubjectsDataset(Dataset):
 
             # Get the transformation results
             transform_result = self.transform(subject)
-            image = torch.squeeze(transform_result['img'].data, dim=-1).permute(0, 2, 1)
-            labels = torch.squeeze(transform_result['label'].data, dim=(0, -1)).t()
-            weights = torch.squeeze(transform_result['weight'].data, dim=(0, -1)).t()
+            image = torch.squeeze(transform_result['img'].data, dim=-1)
+            labels = torch.squeeze(transform_result['label'].data, dim=(0, -1))
+            weights = torch.squeeze(transform_result['weight'].data, dim=(0, -1))
+            # image = torch.squeeze(transform_result['img'].data, dim=-1).permute(0, 2, 1)
+            # labels = torch.squeeze(transform_result['label'].data, dim=(0, -1)).t()
+            # weights = torch.squeeze(transform_result['weight'].data, dim=(0, -1)).t()
         else:
             image, labels, weights = self.images[idx], self.labels[idx], torch.ones(self.images[idx].shape)
-            image = torch.Tensor(image).unsqueeze(dim=0)
+            image = torch.Tensor(image)
             labels = torch.Tensor(labels)
 
         # Normalize the slice's values

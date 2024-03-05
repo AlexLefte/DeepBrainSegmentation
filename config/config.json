@@ -10,14 +10,16 @@
   "checkpoint_path": "experiments/{}/checkpoints/",
 
   "data_path": "dataset",
-  "train_size": 0.7,
-  "val_size": 0.15,
-  "test_size": 0.15,
+  "train_size": 0.8,
+  "val_size": 0.1,
+  "test_size": 0.1,
   "val_data_loader": true,
-  "test_data_loader": false,
+  "test_data_loader": true,
 
-  "preprocessing_modality": "percentiles_&_zscore",
+  "preprocessing_modality": "zscore",
   "data_padding": "182, 218, 182",
+  "data_augmentation": "Rotation",
+  "slice_thickness": 7,
 
   "lr": 0.01,
   "lr_step": 5,
@@ -37,7 +39,7 @@
 
   "lut_path": "config/FastSurfer_ColorLUT.tsv",
 
-  "in_channels": 1,
+  "in_channels": 7,
   "filters": 64,
   "conv_kernel": 5,
   "conv_stride": 1,
