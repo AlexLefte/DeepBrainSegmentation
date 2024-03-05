@@ -779,6 +779,8 @@ def get_thick_slices(img_data,
     """
     Creates a sliding window view into the volume with the given slice thickness.
     """
+    # Pad on the slice index axis with slice_thickness // 2
+    img_data = np.pad(img_data, pad_width=((slice_thickness // 2, slice_thickness // 2), (0, 0), (0, 0)), mode="edge")
     return np.lib.stride_tricks.sliding_window_view(img_data, slice_thickness, axis=0)
 ####################
 
