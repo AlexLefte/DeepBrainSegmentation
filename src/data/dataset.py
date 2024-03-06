@@ -123,13 +123,13 @@ class SubjectsDataset(Dataset):
             self.labels.extend(new_labels)
             self.zooms.extend((zooms, ) * img_data.shape[0])
 
-        if self.mode == 'train':
-            # Get the loss function type
-            loss_fn = cfg['loss_function']
+        # if self.mode == 'train':
+        # Get the loss function type
+        loss_fn = cfg['loss_function']
 
-            # Compute class weights
-            self.weights, self.weights_dict = du.compute_weights(self.labels,
-                                                                 loss_fn)
+        # Compute class weights
+        self.weights, self.weights_dict = du.compute_weights(self.labels,
+                                                             loss_fn)
 
         # Preprocess the data (based on statistics of the entire dataset)
         # self.images, self.labels = du.preprocess(self.images,
@@ -182,7 +182,8 @@ class SubjectsDataset(Dataset):
             # labels = torch.squeeze(transform_result['label'].data, dim=(0, -1)).t()
             # weights = torch.squeeze(transform_result['weight'].data, dim=(0, -1)).t()
         else:
-            image, labels, weights = self.images[idx], self.labels[idx], torch.ones(self.images[idx].shape)
+            # image, labels, weights = self.images[idx], self.labels[idx], torch.ones(self.labels[idx].shape)
+            image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
             image = torch.Tensor(image)
             labels = torch.Tensor(labels)
 
