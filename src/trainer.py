@@ -42,7 +42,8 @@ class Trainer:
                  optim: Optimizer,
                  lr_sch: lr_scheduler,
                  stats_manager: StatsManager,
-                 device: str = 'cpu'):
+                 device: str = 'cpu',
+                 experiment: str = ''):
         """
         Constructor
         """
@@ -63,6 +64,7 @@ class Trainer:
         self.stats = stats_manager
         self.checkpoint_path = cfg['checkpoint_path']
         self.stopper = EarlyStopper(cfg['stopper_max_count'], cfg['stopper_delta'])
+        self.experiment = experiment
 
     def train_step(self,
                    epoch: int):
@@ -133,6 +135,8 @@ class Trainer:
                                           loss=train_loss,
                                           learning_rate=self.lr_scheduler.get_last_lr()[0],
                                           epoch=epoch)
+
+        return train_loss
 
     def eval_step(self,
                   epoch: int):
@@ -210,6 +214,10 @@ class Trainer:
         best_dsc = 0.0
         eval_dsc = 0.0
 
+        # Initialize losses
+        train_loss = 0
+        eval_loss = 0
+
         # Transfer to device
         self.model = self.model.to(self.device)
 
@@ -220,7 +228,7 @@ class Trainer:
         # Loop through training and testing steps for a number of epochs
         for epoch in tqdm(range(self.epochs)):
             # Perform the training step
-            self.train_step(epoch)
+            train_loss = self.train_step(epoch)
 
             # Perform the evaluation step
             eval_loss, eval_dsc = self.eval_step(epoch)
@@ -317,6 +325,6 @@ class Trainer:
         prediction_array = np.stack(y_pred_list, axis=0)
         prediction_array = du.get_lut_from_labels(prediction_array,
                                                   lut_labels)
-        output_path = 'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/02.02.2024/test_output_mri.nii'
+        output_path = f'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/{self.experiment}/test_output_mri.nii'
         save_nifti(prediction_array,
                    output_path)

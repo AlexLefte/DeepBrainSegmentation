@@ -11,6 +11,7 @@ from src.models.loss import *
 from src.models.optimizer import get_optimizer
 
 from utils import logger
+from utils.lr_scheduler import get_lr_scheduler
 from utils.stats_manager import StatsManager
 
 import json
@@ -37,14 +38,14 @@ if __name__ == '__main__':
     # Set an experiment timestamp if name is missing
     if EXPERIMENT is None:
         EXPERIMENT = datetime.now().strftime("%m-%d-%y_%H-%M")
+        cfg['exp_name'] = EXPERIMENT
 
     # Setup the logger
     LOG_PATH = os.path.join(BASE_PATH, cfg['log_path'].format(PLANE), EXPERIMENT + '.log')
     logger.create_logger(LOG_PATH)
 
     # Set up the stats manager
-    SUMMARY_PATH = os.path.join(BASE_PATH, cfg['summary_path'].format(PLANE), EXPERIMENT)
-    stats_manager = StatsManager(cfg['num_classes'], SUMMARY_PATH)
+    stats_manager = StatsManager(cfg)
 
     # Set up the checkpoint manager
     CHECKPOINT_PATH = os.path.join(BASE_PATH, cfg['checkpoint_path'].format(PLANE), EXPERIMENT)
@@ -76,7 +77,7 @@ if __name__ == '__main__':
     train_loader, val_loader, test_loader = get_data_loaders(cfg)
 
     # Initializing the loss & the optimizer
-    loss_fn = get_loss_fn(cfg['loss_function'])
+    loss_fn = get_loss_fn(cfg)
 
     # Initialize the optimizer
     optimizer_type = cfg['optimizer']
@@ -85,10 +86,8 @@ if __name__ == '__main__':
                               learning_rate=cfg['lr'])
 
     # Initialize the learning rate scheduler
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer,
-                                                   step_size=cfg['lr_step'],
-                                                   gamma=cfg['lr_gamma'])
-    # lr_scheduler = None
+    lr_scheduler = get_lr_scheduler(cfg=cfg,
+                                    optimizer=optimizer)
 
     # Initialize the trainer
     trainer = Trainer(cfg=cfg,
@@ -100,7 +99,8 @@ if __name__ == '__main__':
                       optim=optimizer,
                       lr_sch=lr_scheduler,
                       stats_manager=stats_manager,
-                      device=device)
+                      device=device,
+                      experiment=EXPERIMENT)
 
     # Train
     trainer.train()

@@ -7,24 +7,27 @@ from torch.nn.modules.loss import _Loss
 from torch.nn import functional as F
 
 
-def get_loss_fn(loss_type: str):
+def get_loss_fn(cfg: dict):
     """
     Returns the loss function
 
     Parameters
     ----------
-    loss_type: string
-        The loss type
+    cfg: dict
+        Configuration dictionary
     """
     # Initialize the loss function
     loss_fn = None
+
+    # Get the loss type
+    loss_type = cfg['loss_function']
 
     # Choose the loss type accordingly
     if loss_type == 'dice_loss_&_cross_entropy':
         # loss_fn = CombinedLoss()
         loss_fn = TestCombinedLoss()
     elif loss_type == 'unified_focal_loss':
-        loss_fn = Unified_CatFocal_FocalTversky()
+        loss_fn = Unified_CatFocal_FocalTversky(gamma=cfg['loss_gamma'])
 
     # Return loss function
     return loss_fn
@@ -319,12 +322,14 @@ class CategoricalFocalLoss(nn.Module):
             # Compute the background loss
             bkg_probs = y_pred[:, 0, :, :]
             bkg_ce = ce[:, 0, :, :]
-            bkg_loss = (1 - self.alpha) * torch.pow(1 - bkg_probs, self.gamma) * bkg_ce
+            # bkg_loss = (1 - self.alpha) * torch.pow(1 - bkg_probs, self.gamma) * bkg_ce
+            bkg_loss = torch.pow(1 - bkg_probs, self.gamma) * bkg_ce
             bkg_loss = bkg_loss.unsqueeze(dim=1)
 
             # Compute the foreground loss
             fg_ce = ce[:, 1:, :, :]
-            fg_loss = self.alpha * fg_ce
+            # fg_loss = self.alpha * fg_ce
+            fg_loss = fg_ce
 
             # print(f'Bg ce: {str(bkg_ce)}, fg ce: {str(fg_ce)}')
             # bkg_print_loss = torch.mean(torch.sum(bkg_loss, dim=1))
@@ -343,6 +348,7 @@ class CategoricalFocalLoss(nn.Module):
             focal_loss = modulating_factor * ce
 
         # Return the mean loss
+        self.alpha = weights
         focal_loss = torch.mean(self.alpha * torch.sum(focal_loss, dim=1))
         return focal_loss
 
@@ -414,7 +420,7 @@ class FocalTverskyLoss(nn.Module):
         if self.suppress_bkg:
             bkg_tversky = (1 - tversky_idxs[0]).unsqueeze(dim=0)
             # print('Bkg tverski loss: ' + str(torch.mean(bkg_tversky)))
-            fg_tversky = (1 - tversky_idxs[1:]) * (1 - tversky_idxs[1:]) ** (-self.gamma)
+            fg_tversky = (1 - tversky_idxs[1:]) * ((1 - tversky_idxs[1:]) ** (-self.gamma))
             # print('Fg tverski loss: ' + str(torch.mean(fg_tversky)))
             focal_tversky_loss = torch.cat(([bkg_tversky, fg_tversky]), dim=0)
         else:
@@ -453,7 +459,7 @@ class Unified_CatFocal_FocalTversky(nn.Module):
         self.gamma = gamma
         self.categorical_focal = CategoricalFocalLoss(alpha=alpha,
                                                       gamma=1/gamma,
-                                                      suppress_bkg=False)
+                                                      suppress_bkg=True)
         self.focal_tverski = FocalTverskyLoss(alpha=alpha,
                                               gamma=gamma,
                                               suppress_bkg=True)

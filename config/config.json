@@ -5,6 +5,7 @@
   "exp_flag": false,
   "exp_name": null,
   "about_experiment": "Details about the performed experiment",
+  "experiments_path": "experiments/{}/",
   "log_path": "experiments/{}/logs/",
   "summary_path": "experiments/{}/summary/",
   "checkpoint_path": "experiments/{}/checkpoints/",
@@ -24,12 +25,17 @@
   "lr": 0.01,
   "lr_step": 5,
   "lr_gamma": 0.3,
+  "lr_restart": 10,
+  "lr_mult": 2,
+  "lr_min": 0.0001,
+  "lr_scheduler": "CosineAnnealing",
   "weight_decay": 0.00001,
   "batch_size": 16,
 
   "normalize_input": true,
 
-  "loss_function": "dice_loss_&_cross_entropy",
+  "loss_function": "unified_focal_loss",
+  "loss_gamma": 0.1,
   "optimizer": "ADAM_W",
 
   "epochs": 30,
@@ -40,8 +46,8 @@
   "lut_path": "config/FastSurfer_ColorLUT.tsv",
 
   "in_channels": 7,
-  "filters": 64,
-  "conv_kernel": 5,
+  "filters": 71,
+  "conv_kernel": 3,
   "conv_stride": 1,
   "pool_kernel": 2,
   "pool_stride": 2,

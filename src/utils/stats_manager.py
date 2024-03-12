@@ -17,8 +17,7 @@ class StatsManager:
     """
 
     def __init__(self,
-                 num_classes: int,
-                 path: str):
+                 cfg):
         """
         Constructor
 
@@ -29,12 +28,19 @@ class StatsManager:
         path: string
             The experiment's path
         """
-        self.num_classes = num_classes
-        self.summary_writer = SummaryWriter(path)
+        self.cfg = cfg
+        self.num_classes = cfg['num_classes']
+        self.plane_path = os.path.join(cfg['base_path'], cfg['experiments_path'].format(cfg['plane']))
+        self.exp_name = cfg['exp_name']
+        self.plane = cfg['plane']
+        self.summary_writer = SummaryWriter(os.path.join(self.plane_path,
+                                                         self.exp_name))
         self.batch_losses = []
         self.y_pred = []
         self.y_true = []
         self.batch_idx = 1
+        self.epochs = cfg['epochs']
+        self.results = {}
 
     def update_batch_stats(self,
                            preds: Tensor,
@@ -71,12 +77,14 @@ class StatsManager:
 
         # Write the loss value
         self.summary_writer.add_scalar(f'Loss/{mode}', loss, epoch)
+        self.results[f'{mode}_loss'] = loss
 
         # Write the accuracy and the confusion matrix
         accuracy = get_accuracy(y_pred_flat,
                                 y_true_flat,
                                 self.num_classes)
         self.summary_writer.add_scalar(f'Accuracy/{mode}', accuracy, epoch)
+        self.results[f'{mode}_acc'] = accuracy
         # conf_matrix = self.accuracy.get_matrix()
         # self.summary_writer.add_figure(f'Confusion_matrix/{mode}', conf_matrix, epoch)
 
@@ -92,12 +100,15 @@ class StatsManager:
         #                                y_true_flat,
         #                                self.num_classes)
         dice_sub, dice_cort, dice_mean = get_cortical_subcortical_class_dsc(y_pred_flat,
-                                           y_true_flat,
-                                           self.num_classes)
+                                                                            y_true_flat,
+                                                                            self.num_classes)
         # self.summary_writer.add_scalar(f'DSC_mean_per_class/{mode}', dice_per_class, epoch)
         self.summary_writer.add_scalar(f'DSC_sub/{mode}', dice_sub, epoch)
         self.summary_writer.add_scalar(f'DSC_cort/{mode}', dice_cort, epoch)
         self.summary_writer.add_scalar(f'DSC_mean_per_class/{mode}', dice_mean, epoch)
+        self.results[f'{mode}_mean_dsc'] = dice_mean
+        self.results[f'{mode}_cort_dsc'] = dice_sub
+        self.results[f'{mode}_sub_dsc'] = dice_cort
 
         # Write the current learning rate:
         if mode == 'train':
@@ -108,8 +119,8 @@ class StatsManager:
         LOGGER.info(f"Epoch: {epoch} | {mode} loss: {loss:.4f} | {mode} dsc: {dice_mean:.4f} | "
                     f"{mode} accuracy: {accuracy:.4f}")
 
-        # Log info at the end of the training session
-        if epoch == 29:
+        # Log the confusion matrix at the end of the training session
+        if epoch == self.epochs - 1:
             dice_scores = get_class_dsc(y_pred_flat,
                                         y_true_flat,
                                         self.num_classes,
@@ -129,6 +140,11 @@ class StatsManager:
             # Save DataFrame to CSV file
             conf_matrix_df.to_csv('confusion_matrix.csv', index=False)
 
+            # Save the results into a xlsx file
+            if mode == 'Val':
+                # Save to xlsx
+                self.save2csv(sheet_name='Unified_focal_loss_gamma')
+
         # Reset the prediction/ground truth lists
         self.y_pred = []
         self.y_true = []
@@ -139,3 +155,38 @@ class StatsManager:
     def update_pr_curves(self):
         # TODO
         pass
+
+    def save2csv(self,
+                 sheet_name: str):
+        """
+        Saves experiment results into an xlsx file
+        """
+        # Save some cfg settings
+        to_save = ['exp_name', 'preprocessing_modality', 'data_augmentation', 'slice_thickness',
+                   'batch_size', 'loss_function', 'loss_gamma', 'optimizer', 'filters', 'conv_kernel', 'lr_scheduler',
+                   'lr', 'lr_step', 'lr_gamma', 'lr_restart', 'lr_mult', 'lr_min']
+        cfg_dict = {key: self.cfg[key] for key in to_save}
+
+        # Extend with the training/eval stats
+        results = {**cfg_dict, **self.results}
+
+        excel_name = self.plane + '.xlsx'  # Change the file extension to .xlsx
+        excel_path = os.path.join(self.plane_path, excel_name)
+
+        try:
+            df = pd.read_excel(excel_path, sheet_name=sheet_name)
+        except FileNotFoundError:
+            df = pd.DataFrame(columns=list(results.keys()))
+
+        # Create a new DataFrame with the current results
+        new_df = pd.DataFrame([results])
+
+        # Check if the existing DataFrame is empty or has all-NA entries
+        if df.empty or df.isna().all().all():
+            df = new_df
+        else:
+            # Concatenate the existing DataFrame and the new DataFrame
+            df = pd.concat([df, new_df], ignore_index=True)
+
+        # Save the updated Excel file
+        df.to_excel(excel_path, sheet_name=sheet_name, index=False)
