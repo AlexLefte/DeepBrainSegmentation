@@ -33,8 +33,8 @@ class StatsManager:
         self.plane_path = os.path.join(cfg['base_path'], cfg['experiments_path'].format(cfg['plane']))
         self.exp_name = cfg['exp_name']
         self.plane = cfg['plane']
-        self.summary_writer = SummaryWriter(os.path.join(self.plane_path,
-                                                         self.exp_name))
+        self.summary_path = os.path.join(cfg['base_path'], cfg['summary_path'].format(self.plane), self.exp_name)
+        self.summary_writer = SummaryWriter(os.path.join(self.summary_path))
         self.batch_losses = []
         self.y_pred = []
         self.y_true = []
