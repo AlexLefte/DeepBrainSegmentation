@@ -24,8 +24,7 @@ def get_loss_fn(cfg: dict):
 
     # Choose the loss type accordingly
     if loss_type == 'dice_loss_&_cross_entropy':
-        # loss_fn = CombinedLoss()
-        loss_fn = TestCombinedLoss()
+        loss_fn = CombinedLoss()
     elif loss_type == 'unified_focal_loss':
         loss_fn = Unified_CatFocal_FocalTversky(gamma=cfg['loss_gamma'])
 
@@ -145,9 +144,10 @@ class WeightedCELoss(nn.Module):
                 y_pred,
                 y_true,
                 weights):
-        return nn.functional.cross_entropy(input=y_pred,
-                                           target=y_true,
-                                           weight=weights)
+        ce = nn.functional.cross_entropy(input=y_pred,
+                                         target=y_true)
+        weighted_ce = torch.mean(torch.mul(ce, weights))
+        return weighted_ce
 
 
 class CombinedLoss(nn.Module):
@@ -162,9 +162,6 @@ class CombinedLoss(nn.Module):
         """
         super(CombinedLoss, self).__init__()
         self.dice_loss = DiceLoss()
-        # self.dice_loss_2 = DiceLoss2()
-        # self.cross_entropy = WeightedCELoss()
-        # self.weights = weights
 
     def forward(self,
                 y_pred: Tensor,
@@ -178,9 +175,12 @@ class CombinedLoss(nn.Module):
             y_true = y_true.to('cuda')
 
         # See: https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
-        cross_entropy_loss = nn.functional.cross_entropy(input=y_pred,
-                                                         target=y_true.long(),
-                                                         weight=weights_list)
+        ce = nn.functional.cross_entropy(input=y_pred,
+                                         target=y_true.long())
+        cross_entropy_loss = torch.mean(torch.mul(ce, weights))
+        # cross_entropy_loss = nn.functional.cross_entropy(input=y_pred,
+        #                                                  target=y_true.long(),
+        #                                                  weight=weights_list)
 
         dice_loss = self.dice_loss(y_pred=y_pred,
                                    y_true=y_true,
