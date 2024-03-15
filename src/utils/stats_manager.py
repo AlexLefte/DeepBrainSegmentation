@@ -110,6 +110,15 @@ class StatsManager:
         self.results[f'{mode}_cort_dsc'] = dice_sub
         self.results[f'{mode}_sub_dsc'] = dice_cort
 
+        # Write the average Hausdorff distance
+        avg_hd_sub, avg_hd_cort, avg_hd, test = get_cort_subcort_avg_hausdorff(y_pred_flat,
+                                                                               y_true_flat,
+                                                                               self.num_classes)
+        self.summary_writer.add_scalar(f'Avg_HD/{mode}', avg_hd, epoch)
+        self.summary_writer.add_scalar(f'Avg_HD_sub/{mode}', avg_hd_sub, epoch)
+        self.summary_writer.add_scalar(f'Avg_HD_cort/{mode}', avg_hd_cort, epoch)
+        self.summary_writer.add_scalar(f'Avg_HD_direct/{mode}', test, epoch)
+
         # Write the current learning rate:
         if mode == 'train':
             self.summary_writer.add_scalar(f'Learning rate', learning_rate, epoch)

@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sn
 from abc import ABC, abstractmethod
+from skimage import metrics
 
 
 class Metric(ABC):
@@ -294,3 +295,34 @@ def get_class_dsc(y_pred: np.ndarray,
         return np.mean(dsc)
     else:
         return dsc
+
+
+def get_cort_subcort_avg_hausdorff(y_pred: np.ndarray,
+                                   y_true: np.ndarray,
+                                   num_classes: int):
+    """
+    Returns the average Hausdorff distance between the two sets of points.
+    """
+    # Initialize the avg hausdorff distances list
+    avg_hd = []
+
+    # Compute the avg distance for each class
+    for i in range(1, num_classes):
+        y_pred_i = (y_pred == i)
+        y_true_i = (y_true == i)
+
+        # TODO: Check if 'inf' values are present
+
+        # Append the result
+        avg_hd.append(metrics.hausdorff_distance(y_pred_i, y_true_i, method='modified'))
+
+    # Compute the subcortical, cortical and overall average Hausdorff distance
+    avg_hd_subcort = np.mean(avg_hd[:33])
+    avg_hd_cort = np.mean(avg_hd[33:])
+    avg_hd_mean = np.mean(avg_hd)
+
+    # Compare with calling the distance directly
+    avg_hd_direct = metrics.hausdorff_distance(y_pred, y_true, method='modified')
+
+    # Return
+    return avg_hd_subcort, avg_hd_cort, avg_hd_mean, avg_hd_direct
