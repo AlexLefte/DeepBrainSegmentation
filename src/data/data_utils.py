@@ -152,9 +152,12 @@ def get_labels(labels: np.ndarray,
     mask = np.isin(labels, delat_structures)
     labels[mask] -= 1000
 
+    if plane == 'sagittal':
+        # For sagittal map all left structures to the right
+        for right, left in right_left_map.items():
+            labels[labels == right] = left
+
     # Process the labels: unknown => background
-    # labels[labels not in lut_labels] = 0
-    # labels = np.where(labels not in lut_labels, 0, labels)
     mask = ~np.isin(labels, lut_labels)
     # Use the mask to replace elements with 0
     labels[mask] = 0
@@ -162,29 +165,12 @@ def get_labels(labels: np.ndarray,
     # Ensure there are no labels other than those listed in the lookup table
     assert all(item in labels for item in lut_labels), "Error: there are segmentation labels not listed in the LUT."
 
-    if plane != "sagittal":
-        # Create a new LUT into 0 - 95 range:
-        lut_labels = {value: index for index, value in enumerate(lut_labels)}
+    # Create a new LUT into 0-78 range (0-51 for the sagittal plane):
+    lut_labels = {value: index for index, value in enumerate(lut_labels)}
 
-        # Convert the original labels according to this LUT
-        new_labels = np.vectorize(lut_labels.get)(labels)
-        return new_labels
-    else:
-        # Process the labels based on the plane with the understanding that
-        # the sagittal plane does not distinguish between hemispheres.
-
-        # NOTE: if you want to lower the number of labels to 78, then uncomment
-        # labels[labels >= 2000] -= 1000
-
-        # For sagittal map all left structures to the right
-        for right, left in right_left_map.items():
-            labels[labels == left] = right
-
-        # Create a new LUT for the sagittal labels
-        lut_labels_sag = {value: index for index, value in enumerate(lut_labels)}
-        # Convert the original labels according to this LUT
-        new_labels = np.vectorize(lut_labels_sag.get)(labels)
-        return new_labels
+    # Convert the original labels according to this LUT
+    new_labels = np.vectorize(lut_labels.get)(labels)
+    return new_labels
 
 
 def get_labels_from_lut(lut: pd.DataFrame) -> dict.keys:
@@ -255,8 +241,8 @@ def get_sagittal_labels_from_lut(lut: pd.DataFrame) -> list:
     """
     Returns the appropriate LUT labels for the sagittal plane
     """
-    return [lut["ID"][index] for index, name in enumerate(lut["Name"]) \
-            if not name.startswith("Left-") and not name.startswith("ctx-lh")]
+    return [lut["ID"][index] for index, name in enumerate(lut["LabelName"])
+            if not name.startswith("Right-") and not name.startswith("ctx-rh")]
 ######
 
 

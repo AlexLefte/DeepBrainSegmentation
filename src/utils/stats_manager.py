@@ -107,8 +107,8 @@ class StatsManager:
         self.summary_writer.add_scalar(f'DSC_cort/{mode}', dice_cort, epoch)
         self.summary_writer.add_scalar(f'DSC_mean_per_class/{mode}', dice_mean, epoch)
         self.results[f'{mode}_mean_dsc'] = dice_mean
-        self.results[f'{mode}_cort_dsc'] = dice_sub
-        self.results[f'{mode}_sub_dsc'] = dice_cort
+        self.results[f'{mode}_cort_dsc'] = dice_cort
+        self.results[f'{mode}_sub_dsc'] = dice_sub
 
         # Write the average Hausdorff distance
         avg_hd_sub, avg_hd_cort, avg_hd, test = get_cort_subcort_avg_hausdorff(y_pred_flat,
