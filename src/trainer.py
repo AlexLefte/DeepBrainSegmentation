@@ -65,6 +65,7 @@ class Trainer:
         self.checkpoint_path = cfg['checkpoint_path']
         self.stopper = EarlyStopper(cfg['stopper_max_count'], cfg['stopper_delta'])
         self.experiment = experiment
+        self.plane = cfg['plane']
 
     def train_step(self,
                    epoch: int):
@@ -325,6 +326,7 @@ class Trainer:
         prediction_array = np.stack(y_pred_list, axis=0)
         prediction_array = du.get_lut_from_labels(prediction_array,
                                                   lut_labels)
-        output_path = f'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/{self.experiment}/test_output_mri.nii'
+        output_path = (f'/home/alex/PycharmProjects/DeepBrainSegmentation/experiments/{self.plane}/output/'
+                       f'{self.experiment}/test_output_mri.nii')
         save_nifti(prediction_array,
                    output_path)
