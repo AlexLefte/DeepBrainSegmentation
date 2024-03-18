@@ -257,6 +257,10 @@ class Trainer:
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
 
+                # Ensure the minimum learning rate is respected
+                for param_group in self.optimizer.param_groups:
+                    param_group['lr'] = max(param_group['lr'], self.cfg['min_lr'])
+
         # Save the last state of the network
         save_checkpoint(path=self.checkpoint_path,
                         epoch=self.cfg['epochs'],
