@@ -8,7 +8,7 @@ import random
 
 def get_data_loaders(cfg):
     """
-    Creates a PyTorch data using the subjects' custom dataset
+    Creates a PyTorch data loader using the subjects' custom dataset
 
     Parameters
     ----------
@@ -19,37 +19,31 @@ def get_data_loaders(cfg):
     -------
     data_loader: torch.utils.data
     """
-    # Get the data path
-    data_path = cfg['base_path'] + cfg['data_path']
-
     # Get the batch size
     batch_size = cfg['batch_size']
 
-    # Get the subjects' paths
-    subject_paths = [os.path.join(data_path, s) for s in os.listdir(data_path)
-                     if os.path.isdir(os.path.join(data_path, s))]
-
-    # Shuffle the subjects
-    random.shuffle(subject_paths)
-
-    # Return validation mode:
+    # Get validation loader flag:
     validation = cfg['val_data_loader']
 
-    # Return test mode:
+    # Get test loader flag:
     test = cfg['test_data_loader']
 
-    # Get the dataset length
-    subjects_count = len(subject_paths)
+    # Initialize the sets
+    train_set, val_set, test_set = [], [], []
 
-    # Get the sizes of each split
-    if validation:
-        train_size = int(cfg['train_size'] * subjects_count)
-        if test:
-            val_size = int(cfg['val_size'] * subjects_count)
-        else:
-            val_size = subjects_count - train_size
-    else:
-        train_size = subjects_count
+    # Check if hdf5 dataset exists
+    if not cfg['hdf5_dataset']:
+        # Get the data path
+        data_path = cfg['base_path'] + cfg['data_path']
+
+        # Get the subjects' paths
+        subject_paths = [os.path.join(data_path, s) for s in os.listdir(data_path)
+                         if os.path.isdir(os.path.join(data_path, s))]
+
+        # Get the test/val/train split
+        train_set, val_set, test_set = du.get_train_test_split(subject_paths,
+                                                               cfg['train_size'],
+                                                               cfg['test_size'])
 
     # Creating the custom datasets
     # # Training DataLoader
@@ -72,7 +66,7 @@ def get_data_loaders(cfg):
         val_set = [subject_paths[1]]
         val_dataset = SubjectsDataset(cfg=cfg,
                                       subjects=val_set,
-                                      mode='test',
+                                      mode='val',
                                       weights_dict=train_dataset.weights_dict)
         val_loader = DataLoader(
             dataset=val_dataset,
@@ -81,7 +75,6 @@ def get_data_loaders(cfg):
 
     # # Test DataLoader
     if test:
-        # test_set = subject_paths[train_size + val_size:]
         # For testing purposes, the test dataloader will be composed of a training subject,
         # to see how the network performs
         # TODO: remove this afterwards
@@ -90,8 +83,7 @@ def get_data_loaders(cfg):
         LOGGER.info(f'Test subject: {test_subject_name}')
         test_dataset = SubjectsDataset(cfg=cfg,
                                        subjects=test_set,
-                                       mode='test',
-                                       weights_dict=train_dataset.weights_dict)
+                                       mode='test')
         test_loader = DataLoader(
             dataset=test_dataset,
             batch_size=batch_size

@@ -8,6 +8,8 @@ from torch.utils.data import Dataset
 import os
 import nibabel as nib
 from src.data import data_utils as du
+import h5py
+from src.utils.nifti import save_nifti
 
 
 ORIG = 't1weighted.MNI152.nii.gz'
@@ -23,12 +25,11 @@ class SubjectsDataset(Dataset):
                  cfg: dict,
                  subjects: list,
                  mode: str,
-                 weights_dict: list = None):
+                 weights_dict: dict = None):
         """
         Constructor
         """
         # Get the subjects' names
-        # self.subjects = [s for s in os.listdir(path) if os.path.isdir(os.path.join(path, s))]
         self.subjects = subjects
 
         # Save the mode:
@@ -49,92 +50,48 @@ class SubjectsDataset(Dataset):
         # Get slice thickness
         self.slice_thickness = cfg['slice_thickness']
 
-        # Lists for images, labels, label weights, and zooms
-        self.images = []
-        self.labels = []
-        self.zooms = []  # (X, Y, Z) -> physical dimensions (in mm) of a voxel along each axis
-
-        # Weights dictionary
-        self.weights_dict = {} if self.mode == 'train' else weights_dict
-        self.weights = [] if self.mode == 'train' else None
-
         # Get the color look-up tables and right-left dictionary
         self.lut = du.get_lut(cfg['base_path'] + cfg['lut_path'])
         self.lut_labels = self.lut["ID"].values if self.plane != 'sagittal' \
             else du.get_sagittal_labels_from_lut(self.lut)
         self.right_left_dict = du.get_right_left_dict(self.lut)
 
-        # Get start time and load the data
+        # Get start time and load the subjects
         start_time = time.time()
-        for subject in self.subjects:
-            # Extract: orig (original images), orig_labels (annotations according to the
-            # FreeSurfer convention), zooms (voxel dimensions)
-            try:
-                img = nib.load(os.path.join(subject, ORIG))
-                img_data = img.get_fdata()
-                # img_data = np.asarray(img_data, dtype=np.uint8)
-                zooms = img.header.get_zooms()
-                img_labels = np.asarray(nib.load(os.path.join(subject, LABELS)).get_fdata())
-            except Exception as e:
-                print(f'Exception loading: {subject}: {e}')
-                continue
+        if cfg['hdf5_dataset']:
+            hdf5_file = os.path.join(cfg['base_path'], cfg['dataset'], cfg['hdf5_file'])
+            # Load the images and labels from the HDF5 file
+            with h5py.File(hdf5_file, "r") as hf:
+                mode_group = hf[mode]
+                plane_group = mode_group[self.plane]
+                self.images = plane_group['images'][:]
+                self.labels = plane_group['labels'][:]
+                self.zooms = plane_group['zooms'][:]
+        else:
+            # Load the subjects directly
+            self.images, self.labels, self.zooms = du.load_subjects(self.subjects,
+                                                                    self.plane,
+                                                                    self.data_padding,
+                                                                    self.slice_thickness,
+                                                                    self.lut_labels,
+                                                                    self.right_left_dict,
+                                                                    self.processing_modality)
 
-            # Transform according to the current plane.
-            # Performed prior to removing blank slices.
-            img_data, zooms, img_labels = du.fix_orientation(img_data,
-                                                             zooms,
-                                                             img_labels,
-                                                             self.plane)
+        if self.mode == 'train':
+            # Get the loss function type
+            loss_fn = cfg['loss_function']
 
-            # Preprocess the data (based on statistics of the entire dataset)
-            # self.images, self.labels = du.preprocess(self.images,
-            img_data = du.preprocess_subject(img_data,
-                                             self.data_padding)
+            # Compute class weights
+            self.weights, self.weights_dict = du.compute_weights(self.labels,
+                                                                 loss_fn)
+        elif self.mode == 'val':
+            self.weights_dict = weights_dict
+            self.weights = du.get_weights_list(self.labels,
+                                               self.weights_dict)
 
-            # Create an MRI slice window => (D, slice_thickness, H, W)
-            if self.slice_thickness > 1:
-                img_data = du.get_thick_slices(img_data,
-                                               self.slice_thickness)
-                img_data = img_data.transpose((0, 3, 1, 2))
-            else:
-                img_data = np.expand_dims(img_data, axis=1)
-
-            # Remove blank slices
-            img_data, img_labels = du.remove_blank_slices(images=img_data,
-                                                          labels=img_labels)
-
-            # Map the labels starting with 0
-            new_labels = du.get_labels(labels=img_labels,
-                                       lut_labels=self.lut_labels,
-                                       right_left_map=self.right_left_dict,
-                                       plane=self.plane)
-
-            # Saved the transformed labels
-            # save_labels = du.get_lut_from_labels(new_labels,
-            #                                      self.lut_labels)
-            # nifti_img = nib.Nifti1Image(save_labels, affine=np.eye(4))
-            # head, subject_name = os.path.split(subject)
-            # output_path = ('C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/23.02.2024/' +
-            #                subject_name + '.nii')
-            # nib.save(nifti_img, output_path)
-
-            # Append the new subject to the dataset
-            self.images.extend(img_data)
-            self.labels.extend(new_labels)
-            self.zooms.extend((zooms, ) * img_data.shape[0])
-
-        # if self.mode == 'train':
-        # Get the loss function type
-        loss_fn = cfg['loss_function']
-
-        # Compute class weights
-        self.weights, self.weights_dict = du.compute_weights(self.labels,
-                                                             loss_fn)
-
-        # Preprocess the data (based on statistics of the entire dataset)
-        # self.images, self.labels = du.preprocess(self.images,
-        # self.images = du.preprocess(self.images,
-        #                             self.data_padding)
+        else:
+            self.weights = []
+            self.weights_dict = {}
 
         # Get the length of our Dataset
         self.count = len(self.images)
@@ -178,12 +135,11 @@ class SubjectsDataset(Dataset):
             image = torch.squeeze(transform_result['img'].data, dim=-1)
             labels = torch.squeeze(transform_result['label'].data, dim=(0, -1))
             weights = torch.squeeze(transform_result['weight'].data, dim=(0, -1))
-            # image = torch.squeeze(transform_result['img'].data, dim=-1).permute(0, 2, 1)
-            # labels = torch.squeeze(transform_result['label'].data, dim=(0, -1)).t()
-            # weights = torch.squeeze(transform_result['weight'].data, dim=(0, -1)).t()
         else:
-            # image, labels, weights = self.images[idx], self.labels[idx], torch.ones(self.labels[idx].shape)
-            image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
+            if self.mode == 'train' or self.mode == 'val':
+                image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
+            else:
+                image, labels, weights = self.images[idx], self.labels[idx], torch.ones_like(self.labels[idx])
             image = torch.Tensor(image)
             labels = torch.Tensor(labels)
 
@@ -197,3 +153,93 @@ class SubjectsDataset(Dataset):
             'weights': weights,
             'weights_list': torch.tensor(list(self.weights_dict.values()))
         }
+
+
+class InferenceSubjectsDataset(Dataset):
+    """
+    Class used to load only the MRI scans (excluding segmentation labels) into a custom dataset
+    """
+
+    def __init__(self,
+                 cfg: dict,
+                 subjects: list,
+                 plane: str):
+        """
+        Constructor
+        """
+        # Get the subjects' names
+        self.subjects = subjects
+
+        # Get image processing modality:
+        self.processing_modality = cfg['preprocessing_modality']
+
+        # Get data padding:
+        self.data_padding = [int(x) for x in cfg['data_padding'].split(',')]
+
+        # Get slice thickness
+        self.slice_thickness = cfg['slice_thickness']
+
+        # Lists for images and zooms
+        self.images = []
+        self.zooms = []  # (X, Y, Z) -> physical dimensions (in mm) of a voxel along each axis
+
+        # Get start time and load the data
+        start_time = time.time()
+        for subject in self.subjects:
+            # Extract: orig (original images), zooms (voxel dimensions)
+            try:
+                img = nib.load(os.path.join(subject, ORIG))
+                img_data = img.get_fdata()
+                zooms = img.header.get_zooms()
+            except Exception as e:
+                print(f'Exception loading: {subject}: {e}')
+                continue
+
+            # Transform according to the current plane.
+            # Performed prior to removing blank slices.
+            img_data = du.fix_image_orientation(img, plane)
+
+            # Preprocess the data (based on statistics of the entire dataset)
+            img_data = du.preprocess_subject(img_data,
+                                             self.processing_modality,
+                                             self.data_padding)
+
+            # Create an MRI slice window => (D, slice_thickness, H, W)
+            if self.slice_thickness > 1:
+                img_data = du.get_thick_slices(img_data,
+                                               self.slice_thickness)
+                img_data = img_data.transpose((0, 3, 1, 2))
+            else:
+                img_data = np.expand_dims(img_data, axis=1)
+
+            # Append the new subject to the dataset
+            self.images.extend(img_data)
+            self.zooms.extend((zooms,) * img_data.shape[0])
+
+        # Get the length of our Dataset
+        self.count = len(self.images)
+
+        # Get stop time and display info
+        stop_time = time.time()
+        LOGGER.info(f'Inference dataset loaded in {stop_time - start_time: .3f} s.\n'
+                    f'Dataset length: {self.count}.')
+
+    def __len__(self):
+        """
+        Returns the length of the custom dataset.
+        Must be implemented.
+        """
+        return self.count
+
+    def __getitem__(self, idx):
+        """
+        Returns the image data of the patient and the labels.
+        Must be implemented.
+        """
+        # Normalize the slice's values
+        image = self.images[idx]
+        image /= image.max()
+        image = image.clip(0.0, 1.0)
+
+        return image
+

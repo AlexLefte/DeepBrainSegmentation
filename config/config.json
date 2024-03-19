@@ -12,6 +12,8 @@
 
   "data_path": "dataset",
   "train_size": 0.8,
+  "hdf5_dataset": false,
+  "hdf5_file": "dataset.hdf5",
   "val_size": 0.1,
   "test_size": 0.1,
   "val_data_loader": true,

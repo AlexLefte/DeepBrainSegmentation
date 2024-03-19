@@ -6,8 +6,11 @@ import torch.utils.data
 import torchio as tio
 import nibabel.orientations as orientations
 import logging
+import random
+import os
 
-
+ORIG = 't1weighted.MNI152.nii.gz'
+LABELS = 'labels.DKT31.manual+aseg.MNI152.nii.gz'
 LOGGER = logging.getLogger(__name__)
 
 
@@ -45,10 +48,18 @@ def compute_weights(labels: list,
         # Compute the median frequency balanced weights
         weights_dict = compute_median_frequency_balanced_weights(weights_dict)
 
-    # Compute weight arrays
+    # Get the weights arrays
+    weights_list = get_weights_list(labels, weights_dict)
+
+    # Return the dictionary
+    return weights_list, weights_dict
+
+
+def get_weights_list(labels: list,
+                     weights_dict: dict):
+    # Initialize the weights list
     weights_list = []
 
-    # Define a weight ndarray for each training slice
     for label_array in labels:
         # Apply the mapping to the original matrix
         weights_array = np.vectorize(weights_dict.get)(label_array)
@@ -56,8 +67,8 @@ def compute_weights(labels: list,
         # Append the new weight matrix to the collection:
         weights_list.append(weights_array)
 
-    # Return the dictionary
-    return weights_list, weights_dict
+    # Return the list of 2D arrays
+    return weights_list
 
 
 def compute_median_frequency_balanced_weights(class_weights: dict):
@@ -558,6 +569,134 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
     return img, zooms, labels
 
 
+def fix_image_orientation(img, plane: str = 'coronal'):
+    if plane == 'axial':
+        img = img.transpose((2, 1, 0))
+    elif plane == 'coronal':
+        img = img.transpose((1, 2, 0))
+    else:
+        img = img.transpose((0, 2, 1))
+    return img
+
+
+def lateralize_volume(volume):
+    """
+    Lateralize the volume
+    """
+    # TODO
+    pass
+
+
+def load_subjects(subjects: list,
+                  plane: str,
+                  data_padding: list,
+                  slice_thickness: int,
+                  lut: list,
+                  right_left_dict: dict,
+                  preprocessing_mode: str):
+    # Lists for images, labels, label weights, and zooms
+    images = []
+    labels = []
+    zooms = []  # (X, Y, Z) -> physical dimensions (in mm) of a voxel along each axis
+
+    for subject in subjects:
+        # Extract: orig (original images), orig_labels (annotations according to the
+        # FreeSurfer convention), zooms (voxel dimensions)
+        try:
+            img = nib.load(os.path.join(subject, ORIG))
+            img_data = img.get_fdata()
+            zoom = img.header.get_zooms()
+            img_labels = np.asarray(nib.load(os.path.join(subject, LABELS)).get_fdata(), dtype=np.int16)
+        except Exception as e:
+            print(f'Exception loading: {subject}: {e}')
+            continue
+
+        # Transform according to the current plane.
+        # Performed prior to removing blank slices.
+        img_data, zoom, img_labels = fix_orientation(img_data,
+                                                     zoom,
+                                                     img_labels,
+                                                     plane)
+
+        # Preprocess the data (based on statistics of the entire dataset)
+        img_data = preprocess_subject(img_data,
+                                      preprocessing_mode,
+                                      data_padding)
+
+        # Create an MRI slice window => (D, slice_thickness, H, W)
+        if slice_thickness > 1:
+            img_data = get_thick_slices(img_data,
+                                        slice_thickness)
+            img_data = img_data.transpose((0, 3, 1, 2))
+        else:
+            img_data = np.expand_dims(img_data, axis=1)
+
+        # Remove blank slices
+        img_data, img_labels = remove_blank_slices(images=img_data,
+                                                   labels=img_labels)
+
+        # Map the labels starting with 0
+        new_labels = get_labels(labels=img_labels,
+                                lut_labels=lut,
+                                right_left_map=right_left_dict,
+                                plane=plane)
+
+        # Saved the transformed labels
+        # save_labels = du.get_lut_from_labels(new_labels,
+        #                                      self.lut_labels)
+        # head, subject_name = os.path.split(subject)
+        # save_nifti(save_labels, 'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/16.03.2024/'
+        #            + subject_name + '.nii')
+
+        # Change dtype
+        img_data = np.asarray(img_data, dtype=np.uint8)
+        new_labels = np.asarray(new_labels, dtype=np.uint8)
+
+        # Append the new subject to the dataset
+        images.extend(img_data)
+        labels.extend(new_labels)
+        zooms.extend((zoom, ) * img_data.shape[0])
+
+    return images, labels, zooms
+
+
+def mni2coronal(img):
+    """
+    Transpose images from MNI space to coronal
+    """
+    return img.transpose((1, 2, 0))
+
+
+def mni2axial(img):
+    """
+    Transpose images from MNI space to axial
+    """
+    return img.transpose((2, 1, 0))
+
+
+def mni2sagittal(img):
+    """
+    Transpose images from MNI space to sagittal
+    """
+    return img.transpose((0, 2, 1))
+
+
+def sagittal2full(pred: torch.Tensor,
+                  num_classes: int,
+                  lut_sagittal: list,
+                  right_left_map: dict):
+    """
+    Transform sagittal predictions to full (78 classes)
+    """
+    full_class_list = []
+    for i in range(0, num_classes):
+        if i not in lut_sagittal:
+            full_class_list.append(right_left_map[i])
+        else:
+            full_class_list.append(i)
+    return pred[:, full_class_list, :, :]
+
+
 def preprocess_dataset(images: list,
                        padding: list = (320, 320, 320),
                        mode: str = 'percentiles_&_zscore'):
@@ -618,6 +757,7 @@ def preprocess_dataset(images: list,
 
 
 def preprocess_subject(image: np.ndarray,
+                       preprocessing_mode: str,
                        padding=(320, 320, 320)):
     """
     Performs cropping, normalization, followed by augmentation.
@@ -634,7 +774,7 @@ def preprocess_subject(image: np.ndarray,
     transforms_list = []
 
     # 2) Normalize
-    transforms_list.extend(get_norm_transforms())
+    transforms_list.extend(get_norm_transforms(preprocessing_mode))
 
     # 3) Apply transformations:
     # Create a TorchIO ScalarImage instance
@@ -769,5 +909,39 @@ def get_thick_slices(img_data,
     img_data = np.pad(img_data, pad_width=((slice_thickness // 2, slice_thickness // 2), (0, 0), (0, 0)), mode="edge")
     return np.lib.stride_tricks.sliding_window_view(img_data, slice_thickness, axis=0)
 ####################
+
+
+# Data split
+def get_train_test_split(subjects: list,
+                         train_split: float = 0.8,
+                         test_split: float = 0):
+    """
+    Creates a train/val/test split
+    """
+    # Shuffle the subjects
+    random.shuffle(subjects)
+
+    # Get the dataset length
+    subjects_count = len(subjects)
+
+    # Compute train split size and training set
+    train_size = int(train_split * subjects_count)
+    train_set = subjects[:train_size]
+
+    test_set = []
+    if test_split != 0:
+        val_split = 1 - train_split - test_split
+        val_size = int(val_split * subjects_count)
+        test_set = subjects[train_size + val_size:]
+    else:
+        val_size = subjects_count - train_size
+
+    # Compute the validation set
+    val_set = subjects[train_size: train_size + val_size]
+
+    return train_set, val_set, test_set
+#####################################
+
+
 
 
