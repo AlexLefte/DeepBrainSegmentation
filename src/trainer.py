@@ -219,6 +219,13 @@ class Trainer:
         train_loss = 0
         eval_loss = 0
 
+        # Resume training if desired
+        if self.cfg['resume_training']:
+            checkpoint = torch.load(os.path.join(self.cfg['exp_path'], self.cfg['plane'], 'best.pkl'),
+                                    map_location=self.device)
+            self.model.load_state_dict(checkpoint['model_state'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state'])
+
         # Transfer to device
         self.model = self.model.to(self.device)
 
