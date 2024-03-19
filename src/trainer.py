@@ -266,7 +266,7 @@ class Trainer:
 
                 # Ensure the minimum learning rate is respected
                 for param_group in self.optimizer.param_groups:
-                    param_group['lr'] = max(param_group['lr'], self.cfg['min_lr'])
+                    param_group['lr'] = max(param_group['lr'], self.cfg['lr_min'])
 
         # Save the last state of the network
         save_checkpoint(path=self.checkpoint_path,
