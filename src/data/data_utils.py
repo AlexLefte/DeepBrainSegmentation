@@ -648,10 +648,6 @@ def load_subjects(subjects: list,
         # save_nifti(save_labels, 'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/16.03.2024/'
         #            + subject_name + '.nii')
 
-        # Change dtype
-        img_data = np.asarray(img_data, dtype=np.uint8)
-        new_labels = np.asarray(new_labels, dtype=np.uint8)
-
         # Append the new subject to the dataset
         images.extend(img_data)
         labels.extend(new_labels)

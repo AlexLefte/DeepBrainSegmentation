@@ -94,10 +94,6 @@ if __name__ == '__main__':
                                                          right_left_dict=right_left_dict,
                                                          preprocessing_mode=processing_modality)
 
-                # Convert to the adequate format
-                # images = np.asarray(images, dtype=np.uint8)
-                # labels = np.asarray(labels, dtype=np.uint8)
-
                 # Save the subjects under the respective plane group within the split
                 plane_group = split_group.create_group(plane)
                 plane_group.create_dataset("images", data=images)

@@ -79,7 +79,7 @@ def get_data_loaders(cfg):
         # to see how the network performs
         # TODO: remove this afterwards
         test_set = [train_set[0]]
-        test_subject_name = train_set[0].split('\\')[1]
+        test_subject_name = train_set[0].split('\\')[-1]
         LOGGER.info(f'Test subject: {test_subject_name}')
         test_dataset = SubjectsDataset(cfg=cfg,
                                        subjects=test_set,

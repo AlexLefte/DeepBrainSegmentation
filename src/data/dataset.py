@@ -144,8 +144,9 @@ class SubjectsDataset(Dataset):
             labels = torch.Tensor(labels)
 
         # Normalize the slice's values
-        image /= image.max()
-        image = image.clip(0.0, 1.0)
+        image_min = image.min()
+        image_max = image.max()
+        image = (image - image_min) / (image_max - image_min)
 
         return {
             'image': image,
@@ -197,7 +198,7 @@ class InferenceSubjectsDataset(Dataset):
 
             # Transform according to the current plane.
             # Performed prior to removing blank slices.
-            img_data = du.fix_image_orientation(img, plane)
+            img_data = du.fix_image_orientation(img_data, plane)
 
             # Preprocess the data (based on statistics of the entire dataset)
             img_data = du.preprocess_subject(img_data,
