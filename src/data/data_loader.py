@@ -47,9 +47,6 @@ def get_data_loaders(cfg):
 
     # Creating the custom datasets
     # # Training DataLoader
-    # train_set = subject_paths[:train_size]
-    # TODO: Comment
-    train_set = [subject_paths[0]]
     train_dataset = SubjectsDataset(cfg=cfg,
                                     subjects=train_set,
                                     mode='train')
@@ -61,9 +58,6 @@ def get_data_loaders(cfg):
 
     # # Validation DataLoader
     if validation:
-        # val_set = subject_paths[train_size: train_size + val_size]
-        # TODO: Comment
-        val_set = [subject_paths[1]]
         val_dataset = SubjectsDataset(cfg=cfg,
                                       subjects=val_set,
                                       mode='val',
@@ -75,11 +69,9 @@ def get_data_loaders(cfg):
 
     # # Test DataLoader
     if test:
-        # For testing purposes, the test dataloader will be composed of a training subject,
+        # For testing purposes, the test dataloader will be composed of a subject,
         # to see how the network performs
-        # TODO: remove this afterwards
-        test_set = [train_set[0]]
-        test_subject_name = train_set[0].split('\\')[-1]
+        test_subject_name = test_set[0].split('\\')[-1]
         LOGGER.info(f'Test subject: {test_subject_name}')
         test_dataset = SubjectsDataset(cfg=cfg,
                                        subjects=test_set,

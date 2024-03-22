@@ -7,6 +7,7 @@ import torchio as tio
 import nibabel.orientations as orientations
 import logging
 import random
+from skimage import measure
 import os
 
 ORIG = 't1weighted.MNI152.nii.gz'
@@ -611,6 +612,11 @@ def load_subjects(subjects: list,
             print(f'Exception loading: {subject}: {e}')
             continue
 
+        # Normalize the images to [0.0, 255.0]
+        min_val = np.min(img_data)
+        max_val = np.max(img_data)
+        img_data = (img_data - min_val) * (255 / (max_val - min_val))
+
         # Transform according to the current plane.
         # Performed prior to removing blank slices.
         img_data, zoom, img_labels = fix_orientation(img_data,
@@ -927,7 +933,7 @@ def get_train_test_split(subjects: list,
     test_set = []
     if test_split != 0:
         val_split = 1 - train_split - test_split
-        val_size = int(val_split * subjects_count)
+        val_size = round(val_split * subjects_count)
         test_set = subjects[train_size + val_size:]
     else:
         val_size = subjects_count - train_size

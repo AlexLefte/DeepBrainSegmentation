@@ -59,14 +59,14 @@ class SubjectsDataset(Dataset):
         # Get start time and load the subjects
         start_time = time.time()
         if cfg['hdf5_dataset']:
-            hdf5_file = os.path.join(cfg['base_path'], cfg['dataset'], cfg['hdf5_file'])
+            hdf5_file = os.path.join(cfg['base_path'], cfg['data_path'], cfg['hdf5_file'])
             # Load the images and labels from the HDF5 file
             with h5py.File(hdf5_file, "r") as hf:
                 mode_group = hf[mode]
                 plane_group = mode_group[self.plane]
                 self.images = plane_group['images'][:]
                 self.labels = plane_group['labels'][:]
-                self.zooms = plane_group['zooms'][:]
+                # self.zooms = plane_group['zooms'][:]
         else:
             # Load the subjects directly
             self.images, self.labels, self.zooms = du.load_subjects(self.subjects,
@@ -88,7 +88,6 @@ class SubjectsDataset(Dataset):
             self.weights_dict = weights_dict
             self.weights = du.get_weights_list(self.labels,
                                                self.weights_dict)
-
         else:
             self.weights = []
             self.weights_dict = {}

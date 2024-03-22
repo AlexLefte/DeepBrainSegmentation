@@ -94,6 +94,10 @@ if __name__ == '__main__':
                                                          right_left_dict=right_left_dict,
                                                          preprocessing_mode=processing_modality)
 
+                # Convert to uint8
+                images = np.asarray(images, dtype=np.uint8)
+                labels = np.asarray(labels, dtype=np.uint8)
+
                 # Save the subjects under the respective plane group within the split
                 plane_group = split_group.create_group(plane)
                 plane_group.create_dataset("images", data=images)
@@ -101,4 +105,4 @@ if __name__ == '__main__':
                 # plane_group.create_dataset("zooms", data=zooms)  # Unused for the moment
 
     # Print success message
-    print(f'Dataset {args.dataset_name} was successfully loaded.')
+    print(f'Dataset {args.dataset_name} was successfully saved.')
