@@ -225,6 +225,11 @@ class Trainer:
                                     map_location=self.device)
             self.model.load_state_dict(checkpoint['model_state'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state'])
+            # Ensure the optimizer's parameters are on the same device as the model
+            for state in self.optimizer.state.values():
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.to(self.device)
 
         # Transfer to device
         self.model = self.model.to(self.device)

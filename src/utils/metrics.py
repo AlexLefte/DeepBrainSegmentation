@@ -299,7 +299,7 @@ def get_class_dsc(y_pred: np.ndarray,
 
 def get_cort_subcort_avg_hausdorff(y_pred: np.ndarray,
                                    y_true: np.ndarray,
-                                   num_classes: int):
+                                   num_classes: int) -> dict:
     """
     Returns the average Hausdorff distance between the two sets of points.
     """
@@ -322,7 +322,13 @@ def get_cort_subcort_avg_hausdorff(y_pred: np.ndarray,
     avg_hd_mean = np.mean(avg_hd)
 
     # Compare with calling the distance directly
-    avg_hd_direct = metrics.hausdorff_distance(y_pred, y_true, method='modified')
+    avg_hd_scikit = metrics.hausdorff_distance(y_pred, y_true, method='modified')
 
     # Return
-    return avg_hd_subcort, avg_hd_cort, avg_hd_mean, avg_hd_direct
+    return {
+        'avg_hd_subcort': avg_hd_subcort,
+        'avg_hd_cort': avg_hd_cort,
+        'avg_hd_mean': avg_hd_mean,
+        'avg_hd_scikit': avg_hd_scikit
+    }
+
