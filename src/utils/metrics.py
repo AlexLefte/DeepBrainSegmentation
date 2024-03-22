@@ -249,14 +249,14 @@ def get_cortical_subcortical_class_dsc(y_pred: np.ndarray,
 
     for i in range(num_classes):
         # Get all indexes where class 'i' is found
-        labels_i = (y_true == i).astype(int)
+        labels_i = (y_true == i)
 
         # Get all indexes for which class 'i' has been predicted
-        preds_i = (y_pred == i).astype(int)
+        preds_i = (y_pred == i)
 
         # Compute the intersection and union
-        intersect.append(np.sum(labels_i * preds_i))
-        union.append(np.sum(labels_i + preds_i))
+        intersect.append(np.sum(labels_i & preds_i))
+        union.append(np.sum(labels_i) + np.sum(preds_i))
 
     # Compute the dice score per class
     intersect = np.asarray(intersect)
@@ -278,14 +278,14 @@ def get_class_dsc(y_pred: np.ndarray,
 
     for i in range(num_classes):
         # Get all indexes where class 'i' is found
-        labels_i = (y_true == i).astype(int)
+        labels_i = (y_true == i)
 
         # Get all indexes for which class 'i' has been predicted
-        preds_i = (y_pred == i).astype(int)
+        preds_i = (y_pred == i)
 
         # Compute the intersection and union
-        intersect.append(np.sum(labels_i * preds_i))
-        union.append(np.sum(labels_i + preds_i))
+        intersect.append(np.sum(labels_i & preds_i))
+        union.append(np.sum(labels_i) + np.sum(preds_i))
 
     # Compute the dice score per class
     intersect = np.asarray(intersect)

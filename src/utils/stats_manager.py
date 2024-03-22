@@ -56,8 +56,8 @@ class StatsManager:
             Ground truth
         """
         # Append the predictions and labels
-        self.y_pred.extend(preds.cpu().numpy())
-        self.y_true.extend(labels.cpu().numpy())
+        self.y_pred.extend(preds.cpu().numpy().flatten())
+        self.y_true.extend(labels.cpu().numpy().flatten())
 
     def update_epoch_stats(self,
                            mode: str,
@@ -71,17 +71,17 @@ class StatsManager:
         y_pred_concat = np.concatenate(self.y_pred)
         y_true_concat = np.concatenate(self.y_true)
 
-        # Flatten these np.ndarray-type objects
-        y_pred_flat = y_pred_concat.flatten()
-        y_true_flat = y_true_concat.flatten()
+        # Reset the prediction/ground truth lists
+        self.y_pred = []
+        self.y_true = []
 
         # Write the loss value
         self.summary_writer.add_scalar(f'Loss/{mode}', loss, epoch)
         self.results[f'{mode}_loss'] = loss
 
         # Write the accuracy and the confusion matrix
-        accuracy = get_accuracy(y_pred_flat,
-                                y_true_flat,
+        accuracy = get_accuracy(y_pred_concat,
+                                y_true_concat,
                                 self.num_classes)
         self.summary_writer.add_scalar(f'Accuracy/{mode}', accuracy, epoch)
         self.results[f'{mode}_acc'] = accuracy
@@ -89,18 +89,18 @@ class StatsManager:
         # self.summary_writer.add_figure(f'Confusion_matrix/{mode}', conf_matrix, epoch)
 
         # Write the dice similarity coefficient and its associated matrix
-        dice = get_overall_dsc(y_pred_flat,
-                               y_true_flat)
+        dice = get_overall_dsc(y_pred_concat,
+                               y_true_concat)
         self.summary_writer.add_scalar(f'DSC/{mode}', dice, epoch)
         # dice_matrix = self.dice.get_matrix()
         # self.summary_writer.add_figure(f'Dice_matrix/{mode}', dice_matrix, epoch)
 
         # Write the mean dsc (per class)
-        # dice_per_class = get_class_dsc(y_pred_flat,
-        #                                y_true_flat,
+        # dice_per_class = get_class_dsc(y_pred_concat,
+        #                                y_true_concat,
         #                                self.num_classes)
-        dice_sub, dice_cort, dice_mean = get_cortical_subcortical_class_dsc(y_pred_flat,
-                                                                            y_true_flat,
+        dice_sub, dice_cort, dice_mean = get_cortical_subcortical_class_dsc(y_pred_concat,
+                                                                            y_true_concat,
                                                                             self.num_classes)
         # self.summary_writer.add_scalar(f'DSC_mean_per_class/{mode}', dice_per_class, epoch)
         self.summary_writer.add_scalar(f'DSC_sub/{mode}', dice_sub, epoch)
@@ -111,8 +111,8 @@ class StatsManager:
         self.results[f'{mode}_sub_dsc'] = dice_sub
 
         # Write the average Hausdorff distance
-        avg_hd_sub, avg_hd_cort, avg_hd, test = get_cort_subcort_avg_hausdorff(y_pred_flat,
-                                                                               y_true_flat,
+        avg_hd_sub, avg_hd_cort, avg_hd, test = get_cort_subcort_avg_hausdorff(y_pred_concat,
+                                                                               y_true_concat,
                                                                                self.num_classes)
         self.summary_writer.add_scalar(f'Avg_HD/{mode}', avg_hd, epoch)
         self.summary_writer.add_scalar(f'Avg_HD_sub/{mode}', avg_hd_sub, epoch)
@@ -130,16 +130,16 @@ class StatsManager:
 
         # Log the confusion matrix at the end of the training session
         if epoch == self.epochs - 1:
-            dice_scores = get_class_dsc(y_pred_flat,
-                                        y_true_flat,
+            dice_scores = get_class_dsc(y_pred_concat,
+                                        y_true_concat,
                                         self.num_classes,
                                         return_mean=False)
             LOGGER.info(f"{mode} mode DSC results:")
             for i in range(self.num_classes):
                 LOGGER.info(f"Class {i} dice score: {dice_scores[i]}")
 
-            cf_matr = get_confusion_matrix(y_pred_flat,
-                                           y_true_flat,
+            cf_matr = get_confusion_matrix(y_pred_concat,
+                                           y_true_concat,
                                            self.num_classes)
 
             # Convert confusion matrix to Pandas DataFrame
@@ -153,10 +153,6 @@ class StatsManager:
             if mode == 'Val':
                 # Save to xlsx
                 self.save2csv(sheet_name='Unified_focal_loss_gamma')
-
-        # Reset the prediction/ground truth lists
-        self.y_pred = []
-        self.y_true = []
 
         # return dice_per_class
         return dice_mean
