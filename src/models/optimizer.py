@@ -23,11 +23,11 @@ def get_optimizer(model,
                           lr=learning_rate,
                           betas=(0.9, 0.999),
                           eps=1e-08,
-                          weight_decay=0)
+                          weight_decay=1e-4)
     elif optimizer == 'ADAM_W':
         # https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html#torch.optim.AdamW
         return optim.AdamW(model.parameters(),
                            lr=learning_rate,
                            betas=(0.9, 0.999),
-                           eps=1e-08,
-                           weight_decay=0.01)
+                           eps=1e-8,
+                           weight_decay=1e-4)

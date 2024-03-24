@@ -238,8 +238,8 @@ def get_overall_dsc(y_pred: np.ndarray,
 
 
 def get_cortical_subcortical_class_dsc(y_pred: np.ndarray,
-                                      y_true: np.ndarray,
-                                      num_classes: int):
+                                       y_true: np.ndarray,
+                                       num_classes: int):
     """
     Returns the overall dice score
     """
