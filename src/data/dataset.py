@@ -188,21 +188,30 @@ class InferenceSubjectsDataset(Dataset):
         for subject in self.subjects:
             # Extract: orig (original images), zooms (voxel dimensions)
             try:
-                img = nib.load(os.path.join(subject, ORIG))
+                img = nib.load(subject)
                 img_data = img.get_fdata()
                 zooms = img.header.get_zooms()
             except Exception as e:
                 print(f'Exception loading: {subject}: {e}')
                 continue
 
+            # Save the initial shape of the volume
+            self.initial_shape = img_data.shape
+
             # Transform according to the current plane.
             # Performed prior to removing blank slices.
-            img_data = du.fix_image_orientation(img_data, plane)
+            img_data = du.fix_orientation_inference(img_data, plane)
 
             # Preprocess the data (based on statistics of the entire dataset)
             img_data = du.preprocess_subject(img_data,
                                              self.processing_modality,
                                              self.data_padding)
+
+            # Normalize the images to [0.0, 255.0]
+            min_val = np.min(img_data)
+            max_val = np.max(img_data)
+            img_data = (img_data - min_val) * (255 / (max_val - min_val))
+            img_data = np.asarray(img_data, dtype=np.uint8)
 
             # Create an MRI slice window => (D, slice_thickness, H, W)
             if self.slice_thickness > 1:
@@ -238,8 +247,11 @@ class InferenceSubjectsDataset(Dataset):
         """
         # Normalize the slice's values
         image = self.images[idx]
-        image /= image.max()
-        image = image.clip(0.0, 1.0)
+
+        # Normalize the slice's values
+        image_min = image.min()
+        image_max = image.max()
+        image = (image - image_min) / (image_max - image_min)
 
         return image
 

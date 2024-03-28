@@ -15,7 +15,7 @@ LABELS = 'labels.DKT31.manual+aseg.MNI152.nii.gz'
 LOGGER = logging.getLogger(__name__)
 
 
-# Class weights
+# region Class weights
 def compute_weights(labels: list,
                     loss_fn: str) -> (list, dict):
     """
@@ -120,7 +120,7 @@ def compute_non_linear_weights(class_weights: dict,
     for label, weight in class_weights.items():
         if label != 0:
             class_weights[label] = 0.6 + 0.3 * ((class_weights[label] - min_transformed_weight) / (
-                        max_transformed_weight - min_transformed_weight))
+                    max_transformed_weight - min_transformed_weight))
 
     # Return the dictionary
     return class_weights
@@ -148,14 +148,14 @@ def normalize_weights(weights_list: np.ndarray,
 
     # Return the result
     return weights_list
-##########
+# endregion
 
 
-# Labels processing
-def get_labels(labels: np.ndarray,
+# region Labels Processing
+def lut2labels(labels: np.ndarray,
                lut_labels: list,
                right_left_map: dict,
-               plane: str,) -> np.ndarray:
+               plane: str, ) -> np.ndarray:
     """
     Returns the labels in range: 0-78
     """
@@ -165,7 +165,7 @@ def get_labels(labels: np.ndarray,
     labels[mask] -= 1000
 
     if plane == 'sagittal':
-        # For sagittal map all left structures to the right
+        # For sagittal map all right structures to the left
         for right, left in right_left_map.items():
             labels[labels == right] = left
 
@@ -183,6 +183,15 @@ def get_labels(labels: np.ndarray,
     # Convert the original labels according to this LUT
     new_labels = np.vectorize(lut_labels.get)(labels)
     return new_labels
+
+
+def labels2lut(labels: np.ndarray,
+               lut_labels_dict: dict):
+    """
+    Converts the label IDs back to the initial LUT IDs
+    """
+    reverted_dict = {value: key for key, value in lut_labels_dict.items()}
+    return np.vectorize(reverted_dict.get)(labels)
 
 
 def get_labels_from_lut(lut: pd.DataFrame) -> dict.keys:
@@ -217,15 +226,19 @@ def get_right_left_dict(lut: pd.DataFrame) -> dict:
         if name.startswith("Right-"):
             # Get the name of the corresponding structure on left
             left_structure = "Left-" + name[6:]
+        # elif name.startswith("ctx-rh-"):
+        #     # Get the name of the corresponding structure on left
+        #     left_structure = "ctx-lh-" + name[7:]
+        else:
+            continue
 
-            names = lut['LabelName']
+        # Search the index of the left-side structure
+        if lut['LabelName'].str.contains(left_structure).any():
+            # Find the index of the right structure
+            left_idx = [k for k, v in zip(lut["ID"], lut["LabelName"]) if v == left_structure][0]
 
-            if lut['LabelName'].str.contains(left_structure).any():
-                # Find the index of the right structure
-                right_idx = [k for k, v in zip(lut["ID"], lut["LabelName"]) if v == left_structure][0]
-
-                # Add the mapping to the left_to_right_map dictionary
-                right_left_dict[idx] = right_idx
+            # Add the mapping to the left_to_right_map dictionary
+            right_left_dict[idx] = left_idx
     return right_left_dict
 
 
@@ -233,17 +246,6 @@ def get_lut(path: str) -> pd.DataFrame:
     """
     Get the LUT in a data frame
     """
-    # lut = {}
-    #
-    # # Read the Look-Up Table
-    # with open(path, 'r') as file:
-    #     for line in file:
-    #         parts = line.strip().split('\t', 2)  # Use '\t' as the separator for TSV
-    #         if len(parts) == 3:
-    #             label_id, label_name, rgb = parts
-    #             lut[0] = label_id
-    #             lut[1] = [label_name, rgb]
-
     # Get the separator according to the file and read the tsv file
     separator = {"tsv": "\t", "csv": ",", "txt": " "}
     return pd.read_csv(path, sep=separator[path[-3:]])
@@ -255,10 +257,10 @@ def get_sagittal_labels_from_lut(lut: pd.DataFrame) -> list:
     """
     return [lut["ID"][index] for index, name in enumerate(lut["LabelName"])
             if not name.startswith("Right-") and not name.startswith("ctx-rh")]
-######
+# endregion
 
 
-# Data vizualization ###
+# region Data visualization
 def compare_intensity_across_subjects(subjects: list,
                                       subjects_names: list):
     # Initialize lists to store intensity statistics for each subject
@@ -399,10 +401,10 @@ def plot_slices(slices: list, title: str = ''):
         axes[i].set_title(f'Slice {i}')
         axes[i].axis('off')
     plt.show()
-#####################
+# endregion
 
 
-# Data Preprocessing
+# region Loading and Preprocessing Data
 def remove_blank_slices(images: np.ndarray,
                         labels: np.ndarray,
                         threshold: int = 20):
@@ -548,7 +550,7 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
 
     # Apply the orientation to the image data
     # img = nib.orientations.apply_orientation(img, desired_orientation)
-    # zooms = nib.orientations.apply_orientation(zooms, desired_orientation)
+    # # zooms = nib.orientations.apply_orientation(zooms, desired_orientation)
     # labels = nib.orientations.apply_orientation(labels, desired_orientation)
 
     if plane == 'axial':
@@ -570,7 +572,7 @@ def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
     return img, zooms, labels
 
 
-def fix_image_orientation(img, plane: str = 'coronal'):
+def fix_orientation_inference(img, plane):
     if plane == 'axial':
         img = img.transpose((2, 1, 0))
     elif plane == 'coronal':
@@ -580,12 +582,24 @@ def fix_image_orientation(img, plane: str = 'coronal'):
     return img
 
 
-def lateralize_volume(volume):
-    """
-    Lateralize the volume
-    """
-    # TODO
-    pass
+def revert_fix_orientation_inference(img, plane):
+    if plane == 'axial':
+        img = img.transpose((3, 1, 2, 0))
+    elif plane == 'coronal':
+        img = img.transpose((3, 1, 0, 2))
+    else:
+        img = img.transpose((0, 1, 3, 2))
+    return img
+
+
+def orient2coronal(img, plane):
+    if plane == 'axial':
+        img = img.transpose((2, 1, 0))
+    elif plane == 'coronal':
+        img = img.transpose((1, 2, 0))
+    else:
+        img = img.transpose((0, 2, 1))
+    return img
 
 
 def load_subjects(subjects: list,
@@ -612,11 +626,6 @@ def load_subjects(subjects: list,
             print(f'Exception loading: {subject}: {e}')
             continue
 
-        # Normalize the images to [0.0, 255.0]
-        min_val = np.min(img_data)
-        max_val = np.max(img_data)
-        img_data = (img_data - min_val) * (255 / (max_val - min_val))
-
         # Transform according to the current plane.
         # Performed prior to removing blank slices.
         img_data, zoom, img_labels = fix_orientation(img_data,
@@ -628,6 +637,11 @@ def load_subjects(subjects: list,
         img_data = preprocess_subject(img_data,
                                       preprocessing_mode,
                                       data_padding)
+
+        # Normalize the images to [0.0, 255.0]
+        min_val = np.min(img_data)
+        max_val = np.max(img_data)
+        img_data = (img_data - min_val) * (255 / (max_val - min_val))
 
         # Create an MRI slice window => (D, slice_thickness, H, W)
         if slice_thickness > 1:
@@ -642,7 +656,7 @@ def load_subjects(subjects: list,
                                                    labels=img_labels)
 
         # Map the labels starting with 0
-        new_labels = get_labels(labels=img_labels,
+        new_labels = lut2labels(labels=img_labels,
                                 lut_labels=lut,
                                 right_left_map=right_left_dict,
                                 plane=plane)
@@ -657,7 +671,7 @@ def load_subjects(subjects: list,
         # Append the new subject to the dataset
         images.extend(img_data)
         labels.extend(new_labels)
-        zooms.extend((zoom, ) * img_data.shape[0])
+        zooms.extend((zoom,) * img_data.shape[0])
 
     return images, labels, zooms
 
@@ -684,18 +698,21 @@ def mni2sagittal(img):
 
 
 def sagittal2full(pred: torch.Tensor,
-                  num_classes: int,
-                  lut_sagittal: list,
+                  lut: dict,
+                  lut_sagittal: dict,
                   right_left_map: dict):
     """
     Transform sagittal predictions to full (78 classes)
     """
     full_class_list = []
-    for i in range(0, num_classes):
-        if i not in lut_sagittal:
-            full_class_list.append(right_left_map[i])
+    for i in lut.keys():
+        if i in lut_sagittal.keys():
+            full_class_list.append(lut_sagittal[i])
         else:
-            full_class_list.append(i)
+            if i >= 2000:
+                full_class_list.append(lut_sagittal[i-1000])
+            else:
+                full_class_list.append(right_left_map[lut[i]])
     return pred[:, full_class_list, :, :]
 
 
@@ -712,7 +729,7 @@ def preprocess_dataset(images: list,
     """
     # 1) Crop or pad
     # for i in range(len(images)):
-        # images[i], labels[i] = crop_or_pad(images[i], labels[i], padding)
+    # images[i], labels[i] = crop_or_pad(images[i], labels[i], padding)
     #############
 
     # Initialize a transformations list
@@ -910,10 +927,10 @@ def get_thick_slices(img_data,
     # Pad on the slice index axis with slice_thickness // 2
     img_data = np.pad(img_data, pad_width=((slice_thickness // 2, slice_thickness // 2), (0, 0), (0, 0)), mode="edge")
     return np.lib.stride_tricks.sliding_window_view(img_data, slice_thickness, axis=0)
-####################
+# endregion
 
 
-# Data split
+# region Data split
 def get_train_test_split(subjects: list,
                          train_split: float = 0.8,
                          test_split: float = 0):
@@ -942,8 +959,55 @@ def get_train_test_split(subjects: list,
     val_set = subjects[train_size: train_size + val_size]
 
     return train_set, val_set, test_set
-#####################################
+# endregion
 
 
+# region Post-processing
+def lateralize_volume(volume):
+    """
+    Lateralize the volume
+    """
+    # Compute the centroids for the right&left white matter clusters
+    # 2	 Left-Cerebral-White-Matter
+    # 41 Right-Cerebral-White-Matter
+    left_wm_centroid = get_class_centroid(volume == 2)
+    right_wm_centroid = get_class_centroid(volume == 41)
+
+    # Create a list containing all left-hand cortical classes that have been merged before training
+    cortical_classes = [1003, 1006, 1007, 1008, 1009, 1011, 1015, 1018, 1019, 1020, 1021, 1025, 1026, 1027,
+                        1029, 1030, 1031, 1034, 1035]
+
+    # For each label in turn map each pixel to the nearest centroid
+    for label in cortical_classes:
+        # Create a mask for the current label
+        label_mask = volume == label
+
+        # Calculate the distances between each pixel and left and right centroids
+        left_distances = np.linalg.norm(np.argwhere(label_mask) - left_wm_centroid, axis=1)
+        right_distances = np.linalg.norm(np.argwhere(label_mask) - right_wm_centroid, axis=1)
+
+        # Determine the closest centroid for each pixel
+        right_mask = right_distances < left_distances
+
+        # Map the closest centroid to the pixels in the label mask
+        volume[right_mask] += 1000
+
+    return volume
 
 
+def get_class_centroid(volume):
+    """
+    Returns the centroid of a class (computed only on the largest connected region)
+    """
+    # Calculate region properties
+    props = measure.regionprops(measure.label(volume, background=False, connectivity=3))
+    little_props = measure.label(volume, background=False)
+
+    # Find the largest region by area
+    largest_region_index = np.argmax([prop.area for prop in props])
+
+    # Compute the centroid of the largest region
+    centroid = props[largest_region_index].centroid
+
+    return centroid
+# endregion

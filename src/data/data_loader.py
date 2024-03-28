@@ -87,3 +87,31 @@ def get_data_loaders(cfg):
         return train_loader, val_loader, None
     else:
         return train_loader, None, None
+
+
+def get_inference_data_loader(path, cfg, plane):
+    """
+    Creates a test data loader
+
+    Parameters
+    ----------
+    path: str
+        Path towards the input subject file or towards the input directory
+    cfg: dict
+        Configuration settings
+    """
+    if os.path.isdir(path):
+        subjects_list = [os.path.join(path, s) for s in os.listdir(path)]
+    elif os.path.isfile(path):
+        subjects_list = [path]
+    else:
+        raise ValueError(f"{path} is neither a directory nor a file.")
+
+    # Create both the custom dataset and the data loader
+    dataset = InferenceSubjectsDataset(cfg=cfg,
+                                       subjects=subjects_list,
+                                       plane=plane)
+    loader = DataLoader(dataset=dataset,
+                        batch_size=cfg['batch_size'])
+
+    return loader

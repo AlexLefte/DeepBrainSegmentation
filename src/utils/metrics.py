@@ -239,7 +239,8 @@ def get_overall_dsc(y_pred: np.ndarray,
 
 def get_cortical_subcortical_class_dsc(y_pred: np.ndarray,
                                        y_true: np.ndarray,
-                                       num_classes: int):
+                                       num_classes: int = None,
+                                       classes: list = None):
     """
     Returns the overall dice score
     """
@@ -247,7 +248,15 @@ def get_cortical_subcortical_class_dsc(y_pred: np.ndarray,
     intersect = []
     union = []
 
-    for i in range(num_classes):
+    # If num_classes is provided, use it to iterate over classes
+    if num_classes is not None:
+        class_range = range(num_classes)
+    elif classes is not None:
+        class_range = classes
+    else:
+        raise ValueError("Either 'num_classes' or 'classes' must be provided.")
+
+    for i in class_range:
         # Get all indexes where class 'i' is found
         labels_i = (y_true == i)
 

@@ -96,9 +96,9 @@ class StatsManager:
         # self.summary_writer.add_figure(f'Dice_matrix/{mode}', dice_matrix, epoch)
 
         # Write the mean dsc (per class)
-        dice_sub, dice_cort, dice_mean = get_cortical_subcortical_class_dsc(y_pred_flat,
-                                                                            y_true_flat,
-                                                                            self.num_classes)
+        dice_sub, dice_cort, dice_mean = get_cortical_subcortical_class_dsc(y_pred=y_pred_flat,
+                                                                            y_true=y_true_flat,
+                                                                            num_classes=self.num_classes)
         # self.summary_writer.add_scalar(f'DSC_mean_per_class/{mode}', dice_per_class, epoch)
         self.summary_writer.add_scalar(f'DSC_sub/{mode}', dice_sub, epoch)
         self.summary_writer.add_scalar(f'DSC_cort/{mode}', dice_cort, epoch)
