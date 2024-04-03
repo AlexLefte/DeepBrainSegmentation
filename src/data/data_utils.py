@@ -641,7 +641,16 @@ def load_subjects(subjects: list,
         # Normalize the images to [0.0, 255.0]
         min_val = np.min(img_data)
         max_val = np.max(img_data)
-        img_data = (img_data - min_val) * (255 / (max_val - min_val))
+        if min_val != max_val:
+            img_data = (img_data - min_val) * (255 / (max_val - min_val))
+        else:
+            img_data = np.zeros_like(img_data)
+        img_data = np.asarray(img_data, dtype=np.uint8)
+
+        # # Add Gaussian Noise
+        # img_data = add_gaussian_noise(data=img_data,
+        #                               std_dev=25,
+        #                               mean=0)
 
         # Create an MRI slice window => (D, slice_thickness, H, W)
         if slice_thickness > 1:
@@ -660,13 +669,6 @@ def load_subjects(subjects: list,
                                 lut_labels=lut,
                                 right_left_map=right_left_dict,
                                 plane=plane)
-
-        # Saved the transformed labels
-        # save_labels = du.get_lut_from_labels(new_labels,
-        #                                      self.lut_labels)
-        # head, subject_name = os.path.split(subject)
-        # save_nifti(save_labels, 'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/16.03.2024/'
-        #            + subject_name + '.nii')
 
         # Append the new subject to the dataset
         images.extend(img_data)
@@ -716,6 +718,23 @@ def sagittal2full(pred: torch.Tensor,
     return pred[:, full_class_list, :, :]
 
 
+def add_gaussian_noise(data,
+                       std_dev,
+                       mean):
+    """
+    Adds Gaussian noise to data array
+    """
+    noise = np.random.normal(mean, std_dev, size=data.shape)
+
+    # Add the noise to the MRI data
+    data += noise
+
+    # Clip the values to ensure they remain within the range of 0 to 255
+    noisy_mri = np.clip(data, 0, 255)
+
+    return data
+
+
 def preprocess_dataset(images: list,
                        padding: list = (320, 320, 320),
                        mode: str = 'percentiles_&_zscore'):
@@ -741,7 +760,6 @@ def preprocess_dataset(images: list,
     # 3) Apply transformations:
     # Stack all images into a single 3D array
     stacked_images = np.stack(images, axis=0)
-    initial = np.copy(stacked_images)
     stacked_images = np.expand_dims(stacked_images, axis=0)
 
     # Create a TorchIO ScalarImage instance
@@ -756,20 +774,6 @@ def preprocess_dataset(images: list,
 
     # Split the transformed array back into individual slices
     transformed_image_array = np.squeeze(transformed_image_array)
-
-    # Save the result as a NIfTI
-    # plt.figure()
-    # plt.title('Transformed')
-    # plt.imshow(transformed_image_array[100, :, :], origin='lower', cmap='gray')
-    # plt.show()
-    # plt.figure()
-    # plt.title('Original')
-    # plt.imshow(initial[100, :, :], origin='lower', cmap='gray')
-    # plt.show()
-    # nifti_img = nib.Nifti1Image(transformed_image_array, affine=np.eye(4))
-    # output_path = 'C:/Users/Engineer/Documents/Updates/Repo/Segmentation_updates/23.02.2024/output_mri.nii'
-    # nib.save(nifti_img, output_path)
-
     transformed_images = [np.squeeze(image) for image in np.split(transformed_image_array, len(images), axis=0)]
 
     return transformed_images

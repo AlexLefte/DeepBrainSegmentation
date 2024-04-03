@@ -210,8 +210,16 @@ class InferenceSubjectsDataset(Dataset):
             # Normalize the images to [0.0, 255.0]
             min_val = np.min(img_data)
             max_val = np.max(img_data)
-            img_data = (img_data - min_val) * (255 / (max_val - min_val))
+            if min_val != max_val:
+                img_data = (img_data - min_val) * (255 / (max_val - min_val))
+            else:
+                img_data = np.zeros_like(img_data)
             img_data = np.asarray(img_data, dtype=np.uint8)
+
+            # Add Gaussian Noise
+            # img_data = du.add_gaussian_noise(data=img_data,
+            #                                  std_dev=25,
+            #                                  mean=0)
 
             # Create an MRI slice window => (D, slice_thickness, H, W)
             if self.slice_thickness > 1:
@@ -251,7 +259,10 @@ class InferenceSubjectsDataset(Dataset):
         # Normalize the slice's values
         image_min = image.min()
         image_max = image.max()
-        image = (image - image_min) / (image_max - image_min)
+        if image_min != image_max:
+            image = (image - image_min) / (image_max - image_min)
+        else:
+            image /= image_min
 
         return image
 

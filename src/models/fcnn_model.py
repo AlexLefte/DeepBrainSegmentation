@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from submodules import *
+from src.models.submodules import *
 from src.models.crfasrnn_pytorch.crfasrnn.crfrnn import CrfRnn
 
 
@@ -57,9 +57,12 @@ class FCnnModel(nn.Module):
         for module in self.modules():
             if isinstance(module, nn.Conv2d):
                 # Xavier uniform: https://pytorch.org/docs/stable/nn.init.html#torch.nn.init.xavier_uniform_
-                nn.init.xavier_uniform_(module.weight)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.00001)
+                # nn.init.xavier_uniform_(module.weight)
+                # if module.bias is not None:
+                #     nn.init.constant_(module.bias, 0.00001)
+                nn.init.kaiming_normal_(
+                    module.weight, mode="fan_out", nonlinearity="leaky_relu"
+                )
             elif isinstance(module, nn.BatchNorm2d):
                 nn.init.constant_(module.weight, 1)  # Initialize scale to 1
                 nn.init.constant_(module.bias, 0)  # Initialize shift to 0
@@ -102,7 +105,8 @@ class FCnnCRF(FCnnModel):
                               num_iterations=5)
 
     def forward(self,
-                x):
+                x: torch.Tensor) -> torch.Tensor:
         output = super(FCnnModel, self).forward(x)
-        output = self.crf_rnn(output, )
+        output = self.crf_rnn(x, output)
+        return output
 

@@ -287,7 +287,7 @@ def save_predictions(predictions: dict,
         prediction = du.get_lut_from_labels(prediction,
                                             lut)
         subject_name = os.path.basename(subject)
-        prediction_path = os.path.join(output_path, subject_name)
+        prediction_path = os.path.join(output_path, 'aggregated.nii')
         save_nifti(prediction, prediction_path)
 
     for plane, prediction in predictions_without_aggregation.items():
