@@ -105,7 +105,7 @@ class FCnnCRF(FCnnModel):
                               num_iterations=5)
 
     def forward(self,
-                x: torch.Tensor) -> torch.Tensor:
+                x):
         output = super(FCnnModel, self).forward(x)
         output = self.crf_rnn(x, output)
         return output
