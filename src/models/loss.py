@@ -176,7 +176,8 @@ class CombinedLoss(nn.Module):
 
         # See: https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
         ce = nn.functional.cross_entropy(input=y_pred,
-                                         target=y_true.long())
+                                         target=y_true.long(),
+                                         reduction='none')
         cross_entropy_loss = torch.mean(torch.mul(ce, weights))
         # cross_entropy_loss = nn.functional.cross_entropy(input=y_pred,
         #                                                  target=y_true.long(),
