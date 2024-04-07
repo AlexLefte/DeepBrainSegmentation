@@ -14,7 +14,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--data_path',
                         type=str,
-                        default='/dataset/subjects',
+                        default='/dataset',
                         help='Path towards subjects directory.')
 
     parser.add_argument('--output',
@@ -86,22 +86,25 @@ if __name__ == '__main__':
             split_group = hf.create_group(split_name)
             for plane in planes:
                 # Load and save the subjects
-                images, labels, zooms = du.load_subjects(subjects=split,
-                                                         plane=plane,
-                                                         data_padding=data_padding,
-                                                         slice_thickness=slice_thickness,
-                                                         lut=lut_labels if plane != 'sagittal' else lut_labels_sagittal,
-                                                         right_left_dict=right_left_dict,
-                                                         preprocessing_mode=processing_modality)
+                images, labels, weights, zooms = du.load_subjects(subjects=split,
+                                                                  plane=plane,
+                                                                  data_padding=data_padding,
+                                                                  slice_thickness=slice_thickness,
+                                                                  lut=lut_labels if plane != 'sagittal' else lut_labels_sagittal,
+                                                                  right_left_dict=right_left_dict,
+                                                                  preprocessing_mode=processing_modality,
+                                                                  loss_function=cfg['loss_function'])
 
                 # Convert to uint8
                 images = np.asarray(images, dtype=np.uint8)
                 labels = np.asarray(labels, dtype=np.uint8)
+                weights = np.asarray(weights, dtype=float)
 
                 # Save the subjects under the respective plane group within the split
                 plane_group = split_group.create_group(plane)
                 plane_group.create_dataset("images", data=images)
                 plane_group.create_dataset("labels", data=labels)
+                plane_group.create_dataset("weights", data=weights)
                 # plane_group.create_dataset("zooms", data=zooms)  # Unused for the moment
 
     # Print success message

@@ -16,7 +16,46 @@ LOGGER = logging.getLogger(__name__)
 
 
 # region Class weights
-def compute_weights(labels: list,
+# def compute_weights(labels: list,
+#                     loss_fn: str) -> (list, dict):
+#     """
+#     Computes the classes weights matrix
+#
+#     Parameters
+#     ----------
+#     labels: list
+#         Label arrays list
+#     loss_fn: str
+#         Loss function type
+#     """
+#     # Stack the labelled slices:
+#     stacked_labels = np.stack(labels, axis=0)
+#
+#     # Get the unique values in the label matrix (sorted asc)
+#     class_names, class_count = np.unique(stacked_labels, return_counts=True)
+#
+#     # Convert to float type
+#     class_count = np.array(class_count, dtype=float)
+#
+#     # Create the weights dictionary
+#     weights_dict = dict(zip(class_names, class_count))
+#
+#     # Compute the class weights according to the loss function in use
+#     if loss_fn == 'unified_focal_loss':
+#         # Class weights: within the [0, 1] range
+#         # Bkg < 0.5, Fg -> [0.6, 1]
+#         weights_dict = compute_non_linear_weights(weights_dict)
+#     elif loss_fn == 'dice_loss_&_cross_entropy':
+#         # Compute the median frequency balanced weights
+#         weights_dict = compute_median_frequency_balanced_weights(weights_dict)
+#
+#     # Get the weights arrays
+#     weights_list = get_weights_list(labels, weights_dict)
+#
+#     # Return the dictionary
+#     return weights_list, weights_dict
+
+def compute_weights(labels: np.ndarray,
                     loss_fn: str) -> (list, dict):
     """
     Computes the classes weights matrix
@@ -28,11 +67,8 @@ def compute_weights(labels: list,
     loss_fn: str
         Loss function type
     """
-    # Stack the labelled slices:
-    stacked_labels = np.stack(labels, axis=0)
-
     # Get the unique values in the label matrix (sorted asc)
-    class_names, class_count = np.unique(stacked_labels, return_counts=True)
+    class_names, class_count = np.unique(labels, return_counts=True)
 
     # Convert to float type
     class_count = np.array(class_count, dtype=float)
@@ -50,26 +86,33 @@ def compute_weights(labels: list,
         weights_dict = compute_median_frequency_balanced_weights(weights_dict)
 
     # Get the weights arrays
-    weights_list = get_weights_list(labels, weights_dict)
+    weights = get_weights_list(labels, weights_dict)
 
     # Return the dictionary
-    return weights_list, weights_dict
+    return weights
 
 
-def get_weights_list(labels: list,
+# def get_weights_list(labels: list,
+#                      weights_dict: dict):
+#     # Initialize the weights list
+#     weights_list = []
+#
+#     for label_array in labels:
+#         # Apply the mapping to the original matrix
+#         weights_array = np.vectorize(weights_dict.get)(label_array)
+#
+#         # Append the new weight matrix to the collection:
+#         weights_list.append(weights_array)
+#
+#     # Return the list of 2D arrays
+#     return weights_list
+
+def get_weights_list(labels: np.ndarray,
                      weights_dict: dict):
-    # Initialize the weights list
-    weights_list = []
-
-    for label_array in labels:
-        # Apply the mapping to the original matrix
-        weights_array = np.vectorize(weights_dict.get)(label_array)
-
-        # Append the new weight matrix to the collection:
-        weights_list.append(weights_array)
+    weights = np.vectorize(weights_dict.get)(labels)
 
     # Return the list of 2D arrays
-    return weights_list
+    return weights
 
 
 def compute_median_frequency_balanced_weights(class_weights: dict):
@@ -608,10 +651,12 @@ def load_subjects(subjects: list,
                   slice_thickness: int,
                   lut: list,
                   right_left_dict: dict,
-                  preprocessing_mode: str):
+                  preprocessing_mode: str,
+                  loss_function: str):
     # Lists for images, labels, label weights, and zooms
     images = []
     labels = []
+    weights = []
     zooms = []  # (X, Y, Z) -> physical dimensions (in mm) of a voxel along each axis
 
     for subject in subjects:
@@ -670,12 +715,17 @@ def load_subjects(subjects: list,
                                 right_left_map=right_left_dict,
                                 plane=plane)
 
+        # Compute class weights
+        weights_array = compute_weights(new_labels,
+                                        loss_function)
+
         # Append the new subject to the dataset
         images.extend(img_data)
         labels.extend(new_labels)
+        weights.extend(weights_array)
         zooms.extend((zoom,) * img_data.shape[0])
 
-    return images, labels, zooms
+    return images, labels, weights, zooms
 
 
 def mni2coronal(img):

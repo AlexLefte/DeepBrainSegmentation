@@ -71,8 +71,8 @@ def get_data_loaders(cfg):
     if test:
         # For testing purposes, the test dataloader will be composed of a subject,
         # to see how the network performs
-        test_subject_name = test_set[0].split('\\')[-1]
-        LOGGER.info(f'Test subject: {test_subject_name}')
+        # test_subject_name = test_set[0].split('\\')[-1]
+        # LOGGER.info(f'Test subject: {test_subject_name}')
         test_dataset = SubjectsDataset(cfg=cfg,
                                        subjects=test_set,
                                        mode='test')

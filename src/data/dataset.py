@@ -66,29 +66,35 @@ class SubjectsDataset(Dataset):
                 plane_group = mode_group[self.plane]
                 self.images = plane_group['images'][:]
                 self.labels = plane_group['labels'][:]
+                self.weights = plane_group['weights'][:]
                 # self.zooms = plane_group['zooms'][:]
         else:
             # Load the subjects directly
-            self.images, self.labels, self.zooms = du.load_subjects(self.subjects,
-                                                                    self.plane,
-                                                                    self.data_padding,
-                                                                    self.slice_thickness,
-                                                                    self.lut_labels,
-                                                                    self.right_left_dict,
-                                                                    self.processing_modality)
+            self.images, self.labels, self.weights, self.zooms = du.load_subjects(self.subjects,
+                                                                                  self.plane,
+                                                                                  self.data_padding,
+                                                                                  self.slice_thickness,
+                                                                                  self.lut_labels,
+                                                                                  self.right_left_dict,
+                                                                                  self.processing_modality,
+                                                                                  cfg['loss_function'])
 
-        if self.mode == 'train':
-            # Get the loss function type
-            loss_fn = cfg['loss_function']
+        # if self.mode == 'train':
+        #     # Get the loss function type
+        #     loss_fn = cfg['loss_function']
+        #
+        #     # Compute class weights
+        #     self.weights, self.weights_dict = du.compute_weights(self.labels,
+        #                                                          loss_fn)
+        # elif self.mode == 'val':
+        #     self.weights_dict = weights_dict
+        #     self.weights = du.get_weights_list(self.labels,
+        #                                        self.weights_dict)
+        # else:
+        #     self.weights = []
+        #     self.weights_dict = {}
 
-            # Compute class weights
-            self.weights, self.weights_dict = du.compute_weights(self.labels,
-                                                                 loss_fn)
-        elif self.mode == 'val':
-            self.weights_dict = weights_dict
-            self.weights = du.get_weights_list(self.labels,
-                                               self.weights_dict)
-        else:
+        if self.mode == 'test':
             self.weights = []
             self.weights_dict = {}
 
