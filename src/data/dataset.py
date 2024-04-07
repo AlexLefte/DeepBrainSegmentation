@@ -144,7 +144,7 @@ class SubjectsDataset(Dataset):
             if self.mode == 'train' or self.mode == 'val':
                 image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
             else:
-                image, labels, weights = self.images[idx], self.labels[idx], torch.ones_like(self.labels[idx])
+                image, labels, weights = self.images[idx], self.labels[idx], torch.tensor(np.ones_like(self.labels[idx]))
             image = torch.Tensor(image)
             labels = torch.Tensor(labels)
 
