@@ -61,6 +61,20 @@ if __name__ == '__main__':
                                                cfg['train_size'],
                                                cfg['test_size'])
 
+    # Write down the subjects
+    with open('subject_sets.txt', 'w') as file:
+        file.write("Train subjects:\n")
+        for subject in train:
+            file.write(subject + '\n')
+
+        file.write("\nValidation subjects:\n")
+        for subject in val:
+            file.write(subject + '\n')
+
+        file.write("\nTest subjects:\n")
+        for subject in test:
+            file.write(subject + '\n')
+
     # Splits
     splits = {
         'train': train,
