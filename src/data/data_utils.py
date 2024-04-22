@@ -652,7 +652,8 @@ def load_subjects(subjects: list,
                   lut: list,
                   right_left_dict: dict,
                   preprocessing_mode: str,
-                  loss_function: str):
+                  loss_function: str,
+                  mode: str = ''):
     # Lists for images, labels, label weights, and zooms
     images = []
     labels = []
@@ -690,12 +691,15 @@ def load_subjects(subjects: list,
             img_data = (img_data - min_val) * (255 / (max_val - min_val))
         else:
             img_data = np.zeros_like(img_data)
-        img_data = np.asarray(img_data, dtype=np.uint8)
 
-        # # Add Gaussian Noise
-        # img_data = add_gaussian_noise(data=img_data,
-        #                               std_dev=25,
-        #                               mean=0)
+        # Add Gaussian Noise on training data
+        if mode == 'train':
+            img_data = add_gaussian_noise(data=img_data,
+                                          std_dev=5,
+                                          mean=0)
+
+        # Convert to uint8
+        img_data = np.asarray(img_data, dtype=np.uint8)
 
         # Create an MRI slice window => (D, slice_thickness, H, W)
         if slice_thickness > 1:
@@ -780,9 +784,9 @@ def add_gaussian_noise(data,
     data += noise
 
     # Clip the values to ensure they remain within the range of 0 to 255
-    noisy_mri = np.clip(data, 0, 255)
+    noisy_data = np.clip(data, 0, 255)
 
-    return data
+    return noisy_data
 
 
 def preprocess_dataset(images: list,
@@ -900,8 +904,6 @@ def get_norm_transforms(mode: str = 'percentiles_&_zscore') -> (np.ndarray, np.n
     #     # Note: TorchIO does not implement such a scaling mode
     #     stacked_images = np.log(stacked_images + 1)
     else:
-        # Wrong mode => return initial image
-        # LOGGER.info("Invalid normalization mode.")
         return []
     return transforms_list
 

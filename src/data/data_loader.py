@@ -53,26 +53,24 @@ def get_data_loaders(cfg):
     train_loader = DataLoader(
         dataset=train_dataset,
         batch_size=batch_size,
-        pin_memory=True
+        pin_memory=True,
+        shuffle=True
     )
 
     # # Validation DataLoader
     if validation:
         val_dataset = SubjectsDataset(cfg=cfg,
                                       subjects=val_set,
-                                      mode='val',
-                                      weights_dict=train_dataset.weights_dict)
+                                      mode='val')
         val_loader = DataLoader(
             dataset=val_dataset,
             batch_size=batch_size
         )
 
-    # # Test DataLoader
+    # Test DataLoader
     if test:
         # For testing purposes, the test dataloader will be composed of a subject,
         # to see how the network performs
-        # test_subject_name = test_set[0].split('\\')[-1]
-        # LOGGER.info(f'Test subject: {test_subject_name}')
         test_dataset = SubjectsDataset(cfg=cfg,
                                        subjects=test_set,
                                        mode='test')

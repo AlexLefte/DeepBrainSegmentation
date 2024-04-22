@@ -24,8 +24,7 @@ class SubjectsDataset(Dataset):
     def __init__(self,
                  cfg: dict,
                  subjects: list,
-                 mode: str,
-                 weights_dict: dict = None):
+                 mode: str):
         """
         Constructor
         """
@@ -67,6 +66,7 @@ class SubjectsDataset(Dataset):
                 self.images = plane_group['images'][:]
                 self.labels = plane_group['labels'][:]
                 self.weights = plane_group['weights'][:]
+                self.subjects = plane_group['subjects'][:]
                 # self.zooms = plane_group['zooms'][:]
         else:
             # Load the subjects directly
@@ -77,22 +77,8 @@ class SubjectsDataset(Dataset):
                                                                                   self.lut_labels,
                                                                                   self.right_left_dict,
                                                                                   self.processing_modality,
-                                                                                  cfg['loss_function'])
-
-        # if self.mode == 'train':
-        #     # Get the loss function type
-        #     loss_fn = cfg['loss_function']
-        #
-        #     # Compute class weights
-        #     self.weights, self.weights_dict = du.compute_weights(self.labels,
-        #                                                          loss_fn)
-        # elif self.mode == 'val':
-        #     self.weights_dict = weights_dict
-        #     self.weights = du.get_weights_list(self.labels,
-        #                                        self.weights_dict)
-        # else:
-        #     self.weights = []
-        #     self.weights_dict = {}
+                                                                                  cfg['loss_function'],
+                                                                                  mode)
 
         if self.mode == 'test':
             self.weights = []
@@ -148,10 +134,9 @@ class SubjectsDataset(Dataset):
             image = torch.Tensor(image)
             labels = torch.Tensor(labels)
 
-        # Normalize the slice's values
-        image_min = image.min()
-        image_max = image.max()
-        image = (image - image_min) / (image_max - image_min)
+        # Divide by 255 and clip between 0.0 and 1.0
+        image = image.float()
+        image = torch.clamp(image / 255.0, min=0.0, max=1.0)
 
         return {
             'image': image,
@@ -222,11 +207,6 @@ class InferenceSubjectsDataset(Dataset):
                 img_data = np.zeros_like(img_data)
             img_data = np.asarray(img_data, dtype=np.uint8)
 
-            # Add Gaussian Noise
-            # img_data = du.add_gaussian_noise(data=img_data,
-            #                                  std_dev=25,
-            #                                  mean=0)
-
             # Create an MRI slice window => (D, slice_thickness, H, W)
             if self.slice_thickness > 1:
                 img_data = du.get_thick_slices(img_data,
@@ -263,12 +243,7 @@ class InferenceSubjectsDataset(Dataset):
         image = self.images[idx]
 
         # Normalize the slice's values
-        image_min = image.min()
-        image_max = image.max()
-        if image_min != image_max:
-            image = (image - image_min) / (image_max - image_min)
-        else:
-            image /= image_min
+        image = np.clip(image / 255.0, a_min=0.0, a_max=1.0)
 
         return image
 
