@@ -66,15 +66,15 @@ class CompetitiveDenseBlock(nn.Module):
             nn.BatchNorm2d(filters)
         )
 
-        # self.seq4 = nn.Sequential(
-        #     nn.PReLU(),
-        #     nn.Conv2d(in_channels=filters,
-        #               out_channels=filters,
-        #               kernel_size=(kernel, kernel),
-        #               stride=stride,
-        #               padding=padding),
-        #     nn.BatchNorm2d(filters)
-        # )
+        self.seq4 = nn.Sequential(
+            nn.PReLU(),
+            nn.Conv2d(in_channels=filters,
+                      out_channels=filters,
+                      kernel_size=(kernel, kernel),
+                      stride=stride,
+                      padding=padding),
+            nn.BatchNorm2d(filters)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -92,33 +92,19 @@ class CompetitiveDenseBlock(nn.Module):
               |                              ^
               | - - - - - - - - - - - - - - |
         """
-        # out1 = self.seq1(x) if self.is_first else torch.maximum(x, self.seq1(x))
-        # out2 = torch.maximum(out1, self.seq2(out1))
-        # out3 = torch.maximum(out2, self.seq3(out2))
-        # out4 = self.seq4(out3)
-        #
-        # if self.verbose:
-        #     print(f"\nCDB block\n-------")
-        #     print(f"Output shape after the first sequence (BN/PReLU + Conv + BN) -> Maxout: {out1.shape}")
-        #     print(f"Output shape after the second sequence (PReLU + Conv + BN) -> Maxout: {out2.shape}")
-        #     print(f"Output shape after the third sequence (PReLU + Conv + BN) -> Maxout: {out3.shape}")
-        #     print(f"Output shape after the forth sequence (PReLU + Conv + BN): {out4.shape}")
-        #
-        # return out4
         out1 = self.seq1(x) if self.is_first else torch.maximum(x, self.seq1(x))
         out2 = torch.maximum(out1, self.seq2(out1))
-        # out3 = torch.maximum(out2, self.seq3(out2))
-        out3 = self.seq3(out2)
+        out3 = torch.maximum(out2, self.seq3(out2))
+        out4 = self.seq4(out3)
 
         if self.verbose:
             print(f"\nCDB block\n-------")
             print(f"Output shape after the first sequence (BN/PReLU + Conv + BN) -> Maxout: {out1.shape}")
             print(f"Output shape after the second sequence (PReLU + Conv + BN) -> Maxout: {out2.shape}")
-            # print(f"Output shape after the third sequence (PReLU + Conv + BN) -> Maxout: {out3.shape}")
-            # print(f"Output shape after the forth sequence (PReLU + Conv + BN): {out4.shape}")
+            print(f"Output shape after the third sequence (PReLU + Conv + BN) -> Maxout: {out3.shape}")
+            print(f"Output shape after the forth sequence (PReLU + Conv + BN): {out4.shape}")
 
-        # return out4
-        return out3
+        return out4
 
 
 class EncodingCDB(CompetitiveDenseBlock):
