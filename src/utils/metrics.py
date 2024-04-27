@@ -341,3 +341,61 @@ def get_cort_subcort_avg_hausdorff(y_pred: np.ndarray,
         'avg_hd_scikit': avg_hd_scikit
     }
 
+
+def get_scores(y_pred: np.ndarray,
+               y_true: np.ndarray,
+               num_classes: int) -> dict:
+    """
+    Computes the following scores: dice, iou, precision, recall, F1 score, accuracy
+    """
+    # Initialize lists for: Dice Score, IoU, Precision, Recall, F1
+    dsc = []
+    iou = []
+    prec = []
+    recall = []
+    f1 = []
+    acc = []
+
+    # Compute scores for each class
+    for i in range(1, num_classes):
+        # Get all indexes where class 'i' is found
+        labels_i = (y_true == i)
+
+        # Get all indexes for which class 'i' has been predicted
+        preds_i = (y_pred == i)
+
+        # Compute TP, FP, FN, TN
+        tp = np.sum(labels_i & preds_i)
+        fn = np.sum(labels_i & ~preds_i)
+        fp = np.sum(~labels_i & preds_i)
+        tn = len(y_pred) - tp - fn - fp
+
+        # Compute scores
+        dsc.append((2 * tp) / (2 * tp + fn + fp))
+        iou.append(tp / (tp + fn + fp))
+        prec.append(tp / (tp + fp))
+        recall.append(tp / (tp + fn))
+        f1.append(tp / (tp + (fp + fn) / 2))
+        acc.append((tp + tn) / (fn + tp + fp + tn))
+
+        return {
+            'dsc_mean': np.mean(dsc),
+            'dsc_sub': np.mean(dsc[:33]),
+            'dsc_cort': np.mean(dsc[33:]),
+            'iou_mean': np.mean(iou),
+            'iou_sub': np.mean(iou[:33]),
+            'iou_cort': np.mean(iou[33:]),
+            'prec_mean': np.mean(prec),
+            'prec_sub': np.mean(prec[:33]),
+            'prec_cort': np.mean(prec[33:]),
+            'recall_mean': np.mean(recall),
+            'recall_sub': np.mean(recall[:33]),
+            'recall_cort': np.mean(recall[33:]),
+            'f1_mean': np.mean(f1),
+            'f1_sub': np.mean(f1[:33]),
+            'f1_cort': np.mean(f1[33:]),
+            'acc_mean': np.mean(acc),
+            'acc_sub': np.mean(acc[:33]),
+            'acc_cort': np.mean(acc[33:])
+        }
+

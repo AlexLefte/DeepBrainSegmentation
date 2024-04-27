@@ -8,6 +8,9 @@ import numpy as np
 
 import data_utils as du
 
+from sklearn.model_selection import KFold
+import random
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Dataset Creation")
@@ -24,8 +27,18 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset_name',
                         type=str,
-                        default='dataset',
+                        default='dataset_splits_test',
                         help='Output path towards the training datasets.')
+
+    parser.add_argument('--val_split',
+                        type=float,
+                        default=0.1,
+                        help='Train/test sets for cross validation.')
+
+    parser.add_argument('--create_folds',
+                        type=bool,
+                        default=True,
+                        help='Create training folds.')
 
     args = parser.parse_args()
 
@@ -43,6 +56,21 @@ if __name__ == '__main__':
     data_path = parent_dir + args.data_path
     subject_paths = [os.path.join(data_path, s) for s in os.listdir(data_path)
                      if os.path.isdir(os.path.join(data_path, s))]
+    random.shuffle(subject_paths)
+
+    # Create training/validation splits
+    subject_splits = []
+    if args.create_folds:
+        # Create n separate folds and save them inside a dataset
+        n_splits = int(np.floor(1 / args.val_split))
+        kf = KFold(n_splits=n_splits, shuffle=True)
+        splits = kf.split(subject_paths)
+        for i, split in enumerate(splits):
+            train_subjects = [os.path.basename(subject_paths[i]) for i in split[0]]
+            val_subjects = [os.path.basename(subject_paths[i]) for i in split[1]]
+
+            # Append the tuple of train and val subjects to subject_splits
+            subject_splits.append((train_subjects, val_subjects))
 
     # Get the appropriate transformation list
     transform = du.get_aug_transforms(cfg['data_augmentation'])
@@ -56,17 +84,16 @@ if __name__ == '__main__':
     # Get slice thickness
     slice_thickness = cfg['slice_thickness']
 
-    # Split the train/test subject sets
-    train, val, test = du.get_train_test_split(subject_paths,
-                                               cfg['train_size'],
-                                               cfg['test_size'])
+    # # Split the train/test subject sets
+    # train, val, test = du.get_train_test_split(subject_paths,
+    #                                            cfg['train_size'],
+    #                                            cfg['test_size'])
 
-    # Splits
-    splits = {
-        'train': train,
-        'val': val,
-        'test': test
-    }
+    # # Splits
+    # splits = {
+    #     'train': train,
+    #     'val': val
+    # }
 
     # Define the planes list
     planes = ['axial', 'coronal', 'sagittal']
@@ -82,31 +109,41 @@ if __name__ == '__main__':
 
     # Create a hdf5 dataset for each split
     with h5py.File(dataset_path, "w") as hf:
-        for split_name, split in splits.items():
-            split_group = hf.create_group(split_name)
-            for plane in planes:
+        # Save subjects list
+        hf.create_dataset('subjects', data=subject_paths, dtype=h5py.special_dtype(vlen=str))
+
+        # Save cross-validation folds if required
+        if args.create_folds:
+            splits_group = hf.create_group('splits')
+            for i, split in enumerate(subject_splits):
+                split_group = splits_group.create_group(f'split_{i}')
+                split_group.create_dataset('train', data=split[0])
+                split_group.create_dataset('val', data=split[1])
+
+        # Save slices, labels and weights for each subject, each orientation (axial, coronal, sagittal)
+        for plane in planes:
+            plane_group = hf.create_group(plane)
+            for subject in subject_paths:
                 # Load and save the subjects
-                images, labels, weights, zooms = du.load_subjects(subjects=split,
+                images, labels, weights, zooms = du.load_subjects(subjects=[subject],
                                                                   plane=plane,
                                                                   data_padding=data_padding,
                                                                   slice_thickness=slice_thickness,
                                                                   lut=lut_labels if plane != 'sagittal' else lut_labels_sagittal,
                                                                   right_left_dict=right_left_dict,
                                                                   preprocessing_mode=processing_modality,
-                                                                  loss_function=cfg['loss_function'],
-                                                                  mode=split_name)
+                                                                  loss_function=cfg['loss_function'])
 
                 # Convert to uint8
                 images = np.asarray(images, dtype=np.uint8)
                 labels = np.asarray(labels, dtype=np.uint8)
                 weights = np.asarray(weights, dtype=float)
 
-                # Save the subjects under the respective plane group within the split
-                plane_group = split_group.create_group(plane)
-                plane_group.create_dataset("images", data=images)
-                plane_group.create_dataset("labels", data=labels)
-                plane_group.create_dataset("weights", data=weights)
-                plane_group.create_dataset("subjects", data=[os.path.basename(path) for path in split])
+                # Save the subject under the respective plane group within the split
+                subject_group = plane_group.create_group(os.path.basename(subject))
+                subject_group.create_dataset("images", data=images)
+                subject_group.create_dataset("labels", data=labels)
+                subject_group.create_dataset("weights", data=weights)
                 # plane_group.create_dataset("zooms", data=zooms)  # Unused for the moment
 
     # Print success message

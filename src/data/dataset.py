@@ -61,12 +61,16 @@ class SubjectsDataset(Dataset):
             hdf5_file = os.path.join(cfg['base_path'], cfg['data_path'], cfg['hdf5_file'])
             # Load the images and labels from the HDF5 file
             with h5py.File(hdf5_file, "r") as hf:
-                mode_group = hf[mode]
-                plane_group = mode_group[self.plane]
-                self.images = plane_group['images'][:]
-                self.labels = plane_group['labels'][:]
-                self.weights = plane_group['weights'][:]
-                self.subjects = plane_group['subjects'][:]
+                self.images = []
+                self.labels = []
+                self.weights = []
+                plane_group = hf[self.plane]
+                for subject_name, subject in plane_group.items():
+                    if os.path.basename(subject_name) in self.subjects:
+                        self.images.append(subject['images'][:])
+                        self.labels.append(['labels'][:])
+                        self.weights.append(['weights'][:])
+                # self.subjects = subject['subjects'][:]
                 # self.zooms = plane_group['zooms'][:]
         else:
             # Load the subjects directly

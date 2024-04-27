@@ -18,6 +18,7 @@
   "test_size": 0.1,
   "val_data_loader": true,
   "test_data_loader": true,
+  "cross_validation": true,
 
   "preprocessing_modality": "zscore",
   "data_padding": "182, 218, 182",

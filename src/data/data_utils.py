@@ -680,9 +680,9 @@ def load_subjects(subjects: list,
                                                      plane)
 
         # Preprocess the data (based on statistics of the entire dataset)
-        img_data = preprocess_subject(img_data,
-                                      preprocessing_mode,
-                                      data_padding)
+        # img_data = preprocess_subject(img_data,
+        #                               preprocessing_mode,
+        #                               data_padding)
 
         # Normalize the images to [0.0, 255.0]
         min_val = np.min(img_data)
@@ -693,10 +693,10 @@ def load_subjects(subjects: list,
             img_data = np.zeros_like(img_data)
 
         # Add Gaussian Noise on training data
-        if mode == 'train':
-            img_data = add_gaussian_noise(data=img_data,
-                                          std_dev=5,
-                                          mean=0)
+        # if mode == 'train':
+        #     img_data = add_gaussian_noise(data=img_data,
+        #                                   std_dev=5,
+        #                                   mean=0)
 
         # Convert to uint8
         img_data = np.asarray(img_data, dtype=np.uint8)

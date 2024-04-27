@@ -6,6 +6,27 @@ from torch.utils.data import DataLoader
 import random
 
 
+def get_data_loader(cfg, split, mode):
+    """
+    Creates a PyTorch data loader
+    """
+    # Get the batch size
+    batch_size = cfg['batch_size']
+
+    # Get loader
+    dataset = SubjectsDataset(cfg=cfg,
+                              subjects=split,
+                              mode=mode)
+    loader = DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        pin_memory=True,
+        shuffle=True
+    )
+
+    return loader
+
+
 def get_data_loaders(cfg):
     """
     Creates a PyTorch data loader using the subjects' custom dataset

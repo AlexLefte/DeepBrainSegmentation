@@ -135,6 +135,14 @@ class StatsManager:
             for i in range(self.num_classes):
                 LOGGER.info(f"Class {i} dice score: {dice_scores[i]}")
 
+            # Compute all scores
+            scores = get_scores(y_pred_flat,
+                                y_true_flat,
+                                self.num_classes)
+            LOGGER.info(f"\n{mode} Scores:")
+            for score, score_val in scores.items():
+                LOGGER.info(f"{score}: {score_val}")
+
             # Write the average Hausdorff distance
             avg_hd_results = get_cort_subcort_avg_hausdorff(y_pred_flat,
                                                             y_true_flat,
@@ -143,6 +151,7 @@ class StatsManager:
             for key, value in avg_hd_results.items():
                 LOGGER.info(f"{key}: {value}")
 
+            # Compute and save the confusion matrix
             cf_matr = get_confusion_matrix(y_pred_flat,
                                            y_true_flat,
                                            self.num_classes)
@@ -152,7 +161,8 @@ class StatsManager:
                                           columns=range(len(cf_matr[0])))
 
             # Save DataFrame to CSV file
-            conf_matrix_df.to_csv(f'confusion_matrix_{mode}.csv', index=False)
+            path = self.cfg['']
+            conf_matrix_df.to_csv(os.path.join(self.summary_path, f'confusion_matrix_{mode}.csv'), index=False)
 
             # Save the results into a xlsx file
             if mode == 'Val':
