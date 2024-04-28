@@ -67,9 +67,9 @@ class SubjectsDataset(Dataset):
                 plane_group = hf[self.plane]
                 for subject_name, subject in plane_group.items():
                     if os.path.basename(subject_name) in self.subjects:
-                        self.images.append(subject['images'][:])
-                        self.labels.append(['labels'][:])
-                        self.weights.append(['weights'][:])
+                        self.images.extend(subject['images'][:])
+                        self.labels.extend(subject['labels'][:])
+                        self.weights.extend(subject['weights'][:])
                 # self.subjects = subject['subjects'][:]
                 # self.zooms = plane_group['zooms'][:]
         else:
@@ -87,6 +87,7 @@ class SubjectsDataset(Dataset):
         if self.mode == 'test':
             self.weights = []
             self.weights_dict = {}
+        self.weights_dict = {}
 
         # Get the length of our Dataset
         self.count = len(self.images)

@@ -17,11 +17,12 @@ def get_data_loader(cfg, split, mode):
     dataset = SubjectsDataset(cfg=cfg,
                               subjects=split,
                               mode=mode)
+    shuffle = mode == 'train'
     loader = DataLoader(
         dataset=dataset,
         batch_size=batch_size,
         pin_memory=True,
-        shuffle=True
+        shuffle=shuffle
     )
 
     return loader

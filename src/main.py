@@ -43,7 +43,8 @@ def get_subjects_paths_splits(is_cross, data_path, val_size, hdf_file_path=None)
             # Retrieve the splits if performing cross-validation
             if is_cross:
                 if 'splits' in hf:
-                    splits.extend(hf['splits'])
+                    for s in hf['splits'].values():
+                        splits.append((s['train'][:], s['val'][:]))
                 else:
                     train_split, val_split, test = du.get_train_test_split(subjects,
                                                                            1 - val_size,
@@ -110,8 +111,8 @@ if __name__ == '__main__':
     for i, (train, val) in enumerate(subject_splits):
         # Convert from indexes to paths if performing cross-validation
         if cross_val:
-            train = subject_paths[train]
-            val = subject_paths[val]
+            train = [t.decode('utf-8') for t in train]
+            val = [v.decode('utf-8') for v in val]
             EXPERIMENT = datetime.now().strftime("%m-%d-%y_%H-%M")
             cfg['exp_name'] = EXPERIMENT
 
