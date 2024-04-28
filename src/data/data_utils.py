@@ -450,7 +450,7 @@ def plot_slices(slices: list, title: str = ''):
 # region Loading and Preprocessing Data
 def remove_blank_slices(images: np.ndarray,
                         labels: np.ndarray,
-                        threshold: int = 20):
+                        threshold: int = 5):
     """
     Removes slices with very few labeled voxels.
 

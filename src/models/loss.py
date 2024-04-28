@@ -495,7 +495,7 @@ class Unified_CatFocal_FocalTversky(nn.Module):
                                           weights=weights,
                                           weights_list=weights_list)
 
-        return self.lmbd * cat_focal_loss + (1 - self.lmbd) * tverski_loss
+        return cat_focal_loss + tverski_loss
 
 
 class TestDiceLoss(_Loss):

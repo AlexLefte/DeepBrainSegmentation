@@ -20,7 +20,7 @@
   "test_data_loader": true,
   "cross_validation": true,
 
-  "preprocessing_modality": "zscore",
+  "preprocessing_modality": null,
   "data_padding": "182, 218, 182",
   "data_augmentation": "Rotation",
   "slice_thickness": 7,
