@@ -43,7 +43,8 @@ class Trainer:
                  lr_sch: lr_scheduler,
                  stats_manager: StatsManager,
                  device: str = 'cpu',
-                 experiment: str = ''):
+                 experiment: str = '',
+                 checkpoint: str = ''):
         """
         Constructor
         """
@@ -62,7 +63,7 @@ class Trainer:
         self.print_stats = cfg['print_stats']
         self.epochs = cfg['epochs']
         self.stats = stats_manager
-        self.checkpoint_path = cfg['checkpoint_path']
+        self.checkpoint_path = checkpoint
         self.stopper = EarlyStopper(cfg['stopper_max_count'], cfg['stopper_delta'])
         self.experiment = experiment
         self.plane = cfg['plane']

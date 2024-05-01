@@ -1,4 +1,5 @@
 import nibabel as nib
+import nibabel.processing
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,8 +11,8 @@ import random
 from skimage import measure
 import os
 
-ORIG = 't1weighted.MNI152.nii.gz'
-LABELS = 'labels.DKT31.manual+aseg.MNI152.nii.gz'
+ORIG = 't1weighted.nii.gz'
+LABELS = 'labels.DKT31.manual+aseg.nii.gz'
 LOGGER = logging.getLogger(__name__)
 
 
@@ -191,6 +192,8 @@ def normalize_weights(weights_list: np.ndarray,
 
     # Return the result
     return weights_list
+
+
 # endregion
 
 
@@ -225,6 +228,7 @@ def lut2labels(labels: np.ndarray,
 
     # Convert the original labels according to this LUT
     new_labels = np.vectorize(lut_labels.get)(labels)
+    new_labels = np.asarray(new_labels, dtype=np.uint8)
     return new_labels
 
 
@@ -300,6 +304,8 @@ def get_sagittal_labels_from_lut(lut: pd.DataFrame) -> list:
     """
     return [lut["ID"][index] for index, name in enumerate(lut["LabelName"])
             if not name.startswith("Right-") and not name.startswith("ctx-rh")]
+
+
 # endregion
 
 
@@ -444,6 +450,8 @@ def plot_slices(slices: list, title: str = ''):
         axes[i].set_title(f'Slice {i}')
         axes[i].axis('off')
     plt.show()
+
+
 # endregion
 
 
@@ -583,36 +591,50 @@ def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> (n
     return orig, label
 
 
-def fix_orientation(img, zooms, labels, plane: str = 'coronal') -> tuple:
+def fix_orientation_and_voxel_size(img,
+                                   labels,
+                                   plane: str = 'coronal',
+                                   out_shape: tuple = (256, 256, 256),
+                                   vox_size: tuple = (1.0, 1.0, 1.0)) -> tuple:
     """
     Permutes the axis depending on the plane to ensure the same orientation
     is respected (assuming the scan si aligned to MNI152)
     """
-    # Specify the orientation that matches the desired anatomical orientation (e.g., RAS)
-    desired_orientation = orientations.axcodes2ornt('RAS')
+    # Change images and labels orientation
+    reoriented_img = nib.processing.conform(img,
+                                            out_shape=out_shape,
+                                            voxel_size=vox_size,
+                                            order=3,
+                                            cval=0.0,
+                                            orientation='RAS',
+                                            out_class=None)
+    reoriented_labels = nib.processing.conform(labels,
+                                               out_shape=out_shape,
+                                               voxel_size=vox_size,
+                                               order=3,
+                                               cval=0.0,
+                                               orientation='RAS',
+                                               out_class=None)
 
-    # Apply the orientation to the image data
-    # img = nib.orientations.apply_orientation(img, desired_orientation)
-    # # zooms = nib.orientations.apply_orientation(zooms, desired_orientation)
-    # labels = nib.orientations.apply_orientation(labels, desired_orientation)
+    # Extract data
+    img = np.asarray(reoriented_img.get_fdata(), dtype=np.uint8)
+    labels = np.asarray(reoriented_labels.get_fdata(), dtype=np.int16)
 
+    # Change axis according to the desired plan
     if plane == 'axial':
         img = img.transpose((2, 1, 0))
         labels = labels.transpose((2, 1, 0))
-        zooms = zooms[1:]
     elif plane == 'coronal':
         img = img.transpose((1, 2, 0))
         labels = labels.transpose((1, 2, 0))
-        zooms = zooms[:2]
     else:
         img = img.transpose((0, 2, 1))
         labels = labels.transpose((0, 2, 1))
-        zooms = zooms[:2]
 
     if img.shape != labels.shape:
         print("Image and labels shapes must be equal.")
 
-    return img, zooms, labels
+    return img, labels
 
 
 def fix_orientation_inference(img, plane):
@@ -666,23 +688,10 @@ def load_subjects(subjects: list,
         try:
             img = nib.load(os.path.join(subject, ORIG))
             img_data = img.get_fdata()
-            zoom = img.header.get_zooms()
-            img_labels = np.asarray(nib.load(os.path.join(subject, LABELS)).get_fdata(), dtype=np.int16)
+            img_labels = nib.load(os.path.join(subject, LABELS))
         except Exception as e:
             print(f'Exception loading: {subject}: {e}')
             continue
-
-        # Transform according to the current plane.
-        # Performed prior to removing blank slices.
-        img_data, zoom, img_labels = fix_orientation(img_data,
-                                                     zoom,
-                                                     img_labels,
-                                                     plane)
-
-        # Preprocess the data (based on statistics of the entire dataset)
-        # img_data = preprocess_subject(img_data,
-        #                               preprocessing_mode,
-        #                               data_padding)
 
         # Normalize the images to [0.0, 255.0]
         min_val = np.min(img_data)
@@ -691,15 +700,24 @@ def load_subjects(subjects: list,
             img_data = (img_data - min_val) * (255 / (max_val - min_val))
         else:
             img_data = np.zeros_like(img_data)
+        img = nib.Nifti1Image(img_data, img.affine, img.header)
+
+        # Transform according to the current plane.
+        # Performed prior to removing blank slices.
+        img_data, img_labels = fix_orientation_and_voxel_size(img,
+                                                              img_labels,
+                                                              plane)
+
+        # Preprocess the data (based on statistics of the entire dataset)
+        # img_data = preprocess_subject(img_data,
+        #                               preprocessing_mode,
+        #                               data_padding)
 
         # Add Gaussian Noise on training data
         # if mode == 'train':
         #     img_data = add_gaussian_noise(data=img_data,
         #                                   std_dev=5,
         #                                   mean=0)
-
-        # Convert to uint8
-        img_data = np.asarray(img_data, dtype=np.uint8)
 
         # Create an MRI slice window => (D, slice_thickness, H, W)
         if slice_thickness > 1:
@@ -727,9 +745,8 @@ def load_subjects(subjects: list,
         images.extend(img_data)
         labels.extend(new_labels)
         weights.extend(weights_array)
-        zooms.extend((zoom,) * img_data.shape[0])
 
-    return images, labels, weights, zooms
+    return images, labels, weights
 
 
 def mni2coronal(img):
@@ -766,7 +783,7 @@ def sagittal2full(pred: torch.Tensor,
             full_class_list.append(lut_sagittal[i])
         else:
             if i >= 2000:
-                full_class_list.append(lut_sagittal[i-1000])
+                full_class_list.append(lut_sagittal[i - 1000])
             else:
                 full_class_list.append(right_left_map[lut[i]])
     return pred[:, full_class_list, :, :]
@@ -983,6 +1000,8 @@ def get_thick_slices(img_data,
     # Pad on the slice index axis with slice_thickness // 2
     img_data = np.pad(img_data, pad_width=((slice_thickness // 2, slice_thickness // 2), (0, 0), (0, 0)), mode="edge")
     return np.lib.stride_tricks.sliding_window_view(img_data, slice_thickness, axis=0)
+
+
 # endregion
 
 
@@ -1015,6 +1034,8 @@ def get_train_test_split(subjects: list,
     val_set = subjects[train_size: train_size + val_size]
 
     return train_set, val_set, test_set
+
+
 # endregion
 
 

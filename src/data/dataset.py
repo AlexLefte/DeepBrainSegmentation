@@ -7,10 +7,10 @@ import torchio
 from torch.utils.data import Dataset
 import os
 import nibabel as nib
+import nibabel.processing
 from src.data import data_utils as du
 import h5py
 from src.utils.nifti import save_nifti
-
 
 ORIG = 't1weighted.MNI152.nii.gz'
 LABELS = 'labels.DKT31.manual+aseg.MNI152.nii.gz'
@@ -21,6 +21,7 @@ class SubjectsDataset(Dataset):
     """
     Class used to load the MRI scans into a custom dataset
     """
+
     def __init__(self,
                  cfg: dict,
                  subjects: list,
@@ -74,15 +75,15 @@ class SubjectsDataset(Dataset):
                 # self.zooms = plane_group['zooms'][:]
         else:
             # Load the subjects directly
-            self.images, self.labels, self.weights, self.zooms = du.load_subjects(self.subjects,
-                                                                                  self.plane,
-                                                                                  self.data_padding,
-                                                                                  self.slice_thickness,
-                                                                                  self.lut_labels,
-                                                                                  self.right_left_dict,
-                                                                                  self.processing_modality,
-                                                                                  cfg['loss_function'],
-                                                                                  mode)
+            self.images, self.labels, self.weights = du.load_subjects(self.subjects,
+                                                                      self.plane,
+                                                                      self.data_padding,
+                                                                      self.slice_thickness,
+                                                                      self.lut_labels,
+                                                                      self.right_left_dict,
+                                                                      self.processing_modality,
+                                                                      cfg['loss_function'],
+                                                                      mode)
 
         if self.mode == 'test':
             self.weights = []
@@ -135,7 +136,8 @@ class SubjectsDataset(Dataset):
             if self.mode == 'train' or self.mode == 'val':
                 image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
             else:
-                image, labels, weights = self.images[idx], self.labels[idx], torch.tensor(np.ones_like(self.labels[idx]))
+                image, labels, weights = self.images[idx], self.labels[idx], torch.tensor(
+                    np.ones_like(self.labels[idx]))
             image = torch.Tensor(image)
             labels = torch.Tensor(labels)
 
@@ -194,14 +196,20 @@ class InferenceSubjectsDataset(Dataset):
             # Save the initial shape of the volume
             self.initial_shape = img_data.shape
 
+            # Compute the output shape
+            vox_sizes = cfg['vox_size']
+            output_shape = tuple(int(a * b / vox_sizes) for a, b in zip(self.initial_shape, zooms))
+
             # Transform according to the current plane.
             # Performed prior to removing blank slices.
-            img_data = du.fix_orientation_inference(img_data, plane)
-
-            # Preprocess the data (based on statistics of the entire dataset)
-            img_data = du.preprocess_subject(img_data,
-                                             self.processing_modality,
-                                             self.data_padding)
+            img = nib.processing.conform(img,
+                                         out_shape=output_shape,
+                                         voxel_size=(vox_sizes, vox_sizes, vox_sizes),
+                                         order=3,
+                                         cval=0.0,
+                                         orientation='RAS',
+                                         out_class=None)
+            img_data = img.get_fdata()
 
             # Normalize the images to [0.0, 255.0]
             min_val = np.min(img_data)
@@ -251,4 +259,3 @@ class InferenceSubjectsDataset(Dataset):
         image = np.clip(image / 255.0, a_min=0.0, a_max=1.0)
 
         return image
-

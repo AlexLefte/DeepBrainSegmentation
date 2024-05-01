@@ -161,7 +161,6 @@ class StatsManager:
                                           columns=range(len(cf_matr[0])))
 
             # Save DataFrame to CSV file
-            path = self.cfg['']
             conf_matrix_df.to_csv(os.path.join(self.summary_path, f'confusion_matrix_{mode}.csv'), index=False)
 
             # Save the results into a xlsx file

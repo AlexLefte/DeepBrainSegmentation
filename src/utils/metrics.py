@@ -378,24 +378,24 @@ def get_scores(y_pred: np.ndarray,
         f1.append(tp / (tp + (fp + fn) / 2))
         acc.append((tp + tn) / (fn + tp + fp + tn))
 
-        return {
-            'dsc_mean': np.mean(dsc),
-            'dsc_sub': np.mean(dsc[:33]),
-            'dsc_cort': np.mean(dsc[33:]),
-            'iou_mean': np.mean(iou),
-            'iou_sub': np.mean(iou[:33]),
-            'iou_cort': np.mean(iou[33:]),
-            'prec_mean': np.mean(prec),
-            'prec_sub': np.mean(prec[:33]),
-            'prec_cort': np.mean(prec[33:]),
-            'recall_mean': np.mean(recall),
-            'recall_sub': np.mean(recall[:33]),
-            'recall_cort': np.mean(recall[33:]),
-            'f1_mean': np.mean(f1),
-            'f1_sub': np.mean(f1[:33]),
-            'f1_cort': np.mean(f1[33:]),
-            'acc_mean': np.mean(acc),
-            'acc_sub': np.mean(acc[:33]),
-            'acc_cort': np.mean(acc[33:])
-        }
+    return {
+        'dsc_mean': np.mean(dsc),
+        'dsc_sub': np.mean(dsc[:33]),
+        'dsc_cort': np.mean(dsc[33:]),
+        'iou_mean': np.mean(iou),
+        'iou_sub': np.mean(iou[:33]),
+        'iou_cort': np.mean(iou[33:]),
+        'prec_mean': np.mean(prec),
+        'prec_sub': np.mean(prec[:33]),
+        'prec_cort': np.mean(prec[33:]),
+        'recall_mean': np.mean(recall),
+        'recall_sub': np.mean(recall[:33]),
+        'recall_cort': np.mean(recall[33:]),
+        'f1_mean': np.mean(f1),
+        'f1_sub': np.mean(f1[:33]),
+        'f1_cort': np.mean(f1[33:]),
+        'acc_mean': np.mean(acc),
+        'acc_sub': np.mean(acc[:33]),
+        'acc_cort': np.mean(acc[33:])
+    }
 

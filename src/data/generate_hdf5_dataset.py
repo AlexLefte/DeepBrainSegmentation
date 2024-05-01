@@ -11,7 +11,6 @@ import data_utils as du
 from sklearn.model_selection import KFold
 import random
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Dataset Creation")
 
@@ -117,22 +116,22 @@ if __name__ == '__main__':
             splits_group = hf.create_group('splits')
             for i, split in enumerate(subject_splits):
                 split_group = splits_group.create_group(f'split_{i}')
-                split_group.create_dataset('train', data=split[0])
-                split_group.create_dataset('val', data=split[1])
+                split_group.create_dataset('train', data=split[0], dtype=h5py.special_dtype(vlen=str))
+                split_group.create_dataset('val', data=split[1], dtype=h5py.special_dtype(vlen=str))
 
         # Save slices, labels and weights for each subject, each orientation (axial, coronal, sagittal)
         for plane in planes:
             plane_group = hf.create_group(plane)
             for subject in subject_paths:
                 # Load and save the subjects
-                images, labels, weights, zooms = du.load_subjects(subjects=[subject],
-                                                                  plane=plane,
-                                                                  data_padding=data_padding,
-                                                                  slice_thickness=slice_thickness,
-                                                                  lut=lut_labels if plane != 'sagittal' else lut_labels_sagittal,
-                                                                  right_left_dict=right_left_dict,
-                                                                  preprocessing_mode=processing_modality,
-                                                                  loss_function=cfg['loss_function'])
+                images, labels, weights = du.load_subjects(subjects=[subject],
+                                                           plane=plane,
+                                                           data_padding=data_padding,
+                                                           slice_thickness=slice_thickness,
+                                                           lut=lut_labels if plane != 'sagittal' else lut_labels_sagittal,
+                                                           right_left_dict=right_left_dict,
+                                                           preprocessing_mode=processing_modality,
+                                                           loss_function=cfg['loss_function'])
 
                 # Convert to uint8
                 images = np.asarray(images, dtype=np.uint8)

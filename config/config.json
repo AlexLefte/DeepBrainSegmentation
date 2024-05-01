@@ -11,11 +11,12 @@
   "checkpoint_path": "experiments/{}/checkpoints/",
 
   "data_path": "dataset",
-  "train_size": 0.8,
-  "hdf5_dataset": false,
+  "subjects_path": "dataset",
+  "hdf5_dataset": true,
   "hdf5_file": "dataset.hdf5",
+  "train_size": 0.9,
   "val_size": 0.1,
-  "test_size": 0.1,
+  "test_size": 0.005,
   "val_data_loader": true,
   "test_data_loader": true,
   "cross_validation": true,
@@ -23,6 +24,7 @@
   "preprocessing_modality": null,
   "data_padding": "182, 218, 182",
   "data_augmentation": "Rotation",
+  "vox_size": 1.0,
   "slice_thickness": 7,
 
   "lr": 0.01,
@@ -31,9 +33,9 @@
   "lr_restart": 10,
   "lr_mult": 2,
   "lr_min": 0.0001,
-  "lr_scheduler": "CosineAnnealing",
+  "lr_scheduler": "StepLR",
   "weight_decay": 0.00001,
-  "batch_size": 16,
+  "batch_size": 8,
 
   "normalize_input": true,
 

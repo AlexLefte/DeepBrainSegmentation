@@ -30,6 +30,7 @@ class FCnnModel(nn.Module):
         # 1. Defining the encoding sequence:
         self.enc1 = EncodingCDB(params=params, is_input=True)
         # From now on the input shape must be equal to the number of filters:
+        in_channels = params["in_channels"]
         params["in_channels"] = filters
         self.enc2 = EncodingCDB(params=params)
         self.enc3 = EncodingCDB(params=params)
@@ -49,6 +50,8 @@ class FCnnModel(nn.Module):
 
         # Initialize the layers:
         self._initialize_weights()
+
+        params["in_channels"] = in_channels
 
     def _initialize_weights(self):
         """

@@ -138,7 +138,6 @@ if __name__ == '__main__':
 
         # Set up the checkpoint manager
         CHECKPOINT_PATH = os.path.join(BASE_PATH, cfg['checkpoint_path'].format(PLANE), EXPERIMENT)
-        cfg['checkpoint_path'] = CHECKPOINT_PATH
 
         LOGGER.info(f'Device: {device}')
 
@@ -176,7 +175,8 @@ if __name__ == '__main__':
                           lr_sch=lr_scheduler,
                           stats_manager=stats_manager,
                           device=device,
-                          experiment=EXPERIMENT)
+                          experiment=EXPERIMENT,
+                          checkpoint=CHECKPOINT_PATH)
 
         # Train
         trainer.train()
