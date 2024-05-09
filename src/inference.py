@@ -199,13 +199,13 @@ def run_inference(models: dict,
                   f"\n===========================================")
 
         # Apply argmax
-        pred_classes = np.argmax(aggregated_pred, axis=1).astype(np.int16)
+        pred_classes = np.argmax(aggregated_pred, axis=1).astype(np.uint8)
 
         # Map back to the initial LUT (FreeSurfer)
-        # pred_classes = du.labels2lut(pred_classes, lut_labels_dict)
+        pred_classes = du.labels2lut(pred_classes, lut_labels_dict)
 
         # Relateralize the volume
-        # pred_classes = du.lateralize_volume(pred_classes)
+        pred_classes = du.lateralize_volume(pred_classes)
 
         # Append the prediction
         predictions[subject] = pred_classes
@@ -242,30 +242,35 @@ def run_test(models: dict,
         flat_preds[plane] = pred.flatten()
 
     # Load the ground truth
-    labels = np.asarray(nib.load(labels_path).get_fdata(), dtype=np.int16).flatten()
-    # cortical_classes = [1003, 1006, 1007, 1008, 1009, 1011, 1015, 1018, 1019, 1020, 1021, 1025, 1026, 1027,
-    #                     1029, 1030, 1031, 1034, 1035]
-    # cortical_classes.extend(du.get_lut(args.lut)['ID'])
-    # # Process the labels: unknown => background
-    # mask = ~np.isin(labels, cortical_classes)
-    # # Use the mask to replace elements with 0
-    # labels[mask] = 0
+    labels = nib.load(labels_path)
+    # labels = np.asarray(labels.get_fdata(), dtype=np.int16).flatten()
+
+    labels = du.reorient_resample_volume(labels, vox_zoom=1.0, interpolation_order=0)
+    labels = np.asarray(labels, dtype=np.int16).flatten()
+
+    cortical_classes = [1003, 1006, 1007, 1008, 1009, 1011, 1015, 1018, 1019, 1020, 1021, 1025, 1026, 1027,
+                        1029, 1030, 1031, 1034, 1035]
+    cortical_classes.extend(du.get_lut(args.lut)['ID'])
+    # Process the labels: unknown => background
+    mask = ~np.isin(labels, cortical_classes)
+    # Use the mask to replace elements with 0
+    labels[mask] = 0
 
     # # TODO: Just for the moment we will get the labels into the 0-78 range. Remove afterwards.
-    lut = du.get_lut(args.lut)
-    right_left_dict = du.get_right_left_dict(lut)
-    labels = du.lut2labels(labels=labels,
-                           lut_labels=lut["ID"].values,
-                           right_left_map=right_left_dict,
-                           plane='coronal')
-    labels = labels.flatten()
+    # lut = du.get_lut(args.lut)
+    # right_left_dict = du.get_right_left_dict(lut)
+    # labels = du.lut2labels(labels=labels,
+    #                        lut_labels=lut["ID"].values,
+    #                        right_left_map=right_left_dict,
+    #                        plane='coronal')
+    # labels = labels.flatten()
 
     # Compute the dsc for each of them:
     dsc = {}
     for key, flat_pred in flat_preds.items():
         dsc_tuple = get_cortical_subcortical_class_dsc(y_pred=flat_pred,
                                                        y_true=labels,
-                                                       num_classes=79)
+                                                       num_classes=95)
                                                        # classes=cortical_classes)
         dsc[key] = dsc_tuple
 
@@ -273,6 +278,17 @@ def run_test(models: dict,
     for key, dice_scores in dsc.items():
         scores = f'{dice_scores[0]} subcortical, {dice_scores[1]} cortical, {dice_scores[2]} mean.'
         print(f'Scores for {key}: {scores}')
+
+    # Other scores
+    scores = {}
+    for key, flat_pred in flat_preds.items():
+        scores_dict = get_scores(y_pred=flat_pred,
+                                 y_true=labels,
+                                 num_classes=95)
+        scores[key] = scores_dict
+    for key, scores in dsc.items():
+        for k, v in scores:
+            print(f'Score {k}: {v}')
 
     end_time = time.time()
     LOGGER.info(f"==== Stopped testing. Total time: {end_time - start_time:.3f} seconds ===="
@@ -304,12 +320,12 @@ if __name__ == '__main__':
     # Inference settings
     parser.add_argument('--input_path',
                         type=str,
-                        default='dataset/OASIS-TRT-20-2/t1weighted.MNI152.nii.gz',
+                        default='dataset/OASIS-TRT-20-8/t1weighted.nii.gz',
                         help='Path towards the input file/directory')
 
     parser.add_argument('--labels_path',
                         type=str,
-                        default='dataset/OASIS-TRT-20-2/labels.DKT31.manual+aseg.MNI152.nii.gz',
+                        default='dataset/OASIS-TRT-20-8/labels.DKT31.manual+aseg.nii.gz',
                         help='Path towards the labels file/directory')
 
     parser.add_argument('--output_path',

@@ -202,14 +202,40 @@ class InferenceSubjectsDataset(Dataset):
 
             # Transform according to the current plane.
             # Performed prior to removing blank slices.
-            img = nib.processing.conform(img,
-                                         out_shape=output_shape,
-                                         voxel_size=(vox_sizes, vox_sizes, vox_sizes),
-                                         order=3,
-                                         cval=0.0,
-                                         orientation='RAS',
-                                         out_class=None)
-            img_data = img.get_fdata()
+            # img = nib.processing.conform(img,
+            #                              out_shape=output_shape,
+            #                              voxel_size=(vox_sizes, vox_sizes, vox_sizes),
+            #                              order=3,
+            #                              cval=0.0,
+            #                              orientation='RAS',
+            #                              out_class=None)
+            # img_data = img.get_fdata()
+
+            img_data = du.reorient_resample_volume(img, vox_zoom=1.0)
+
+            # Initialize a transformations list
+            transforms_list = []
+
+            # 2) Normalize
+            transforms_list.extend(du.get_norm_transforms('percentiles_&_zscore'))
+
+            # 3) Apply transformations:
+            # Stack all images into a single 3D array
+            stacked_images = np.expand_dims(img_data, axis=0)
+
+            # Create a TorchIO ScalarImage instance
+            import torchio as tio
+            image = tio.ScalarImage(tensor=stacked_images)
+
+            # Apply each transformation
+            for transform in transforms_list:
+                image = transform(image)
+
+            # Retrieve the transformed NumPy array
+            transformed_image_array = image.data.numpy()
+
+            # Split the transformed array back into individual slices
+            img_data = np.squeeze(transformed_image_array)
 
             # Normalize the images to [0.0, 255.0]
             min_val = np.min(img_data)
