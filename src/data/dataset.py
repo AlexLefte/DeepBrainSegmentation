@@ -65,14 +65,29 @@ class SubjectsDataset(Dataset):
                 self.images = []
                 self.labels = []
                 self.weights = []
-                plane_group = hf[self.plane]
-                for subject_name, subject in plane_group.items():
+                for subject_name, subject in hf.items():
                     if os.path.basename(subject_name) in self.subjects:
-                        self.images.extend(subject['images'][:])
-                        self.labels.extend(subject['labels'][:])
-                        self.weights.extend(subject['weights'][:])
-                # self.subjects = subject['subjects'][:]
-                # self.zooms = plane_group['zooms'][:]
+                        images = subject['images'][:]
+                        if self.plane == 'sagittal':
+                            labels = subject['fused_labels'][:]
+                            weights = subject['fused_weights'][:]
+                        else:
+                            labels = subject['labels'][:]
+                            weights = subject['weights'][:]
+
+                        # Get the plane orientation
+                        du.apply_plane_orientation([images, labels, weights], self.plane)
+
+                        # Create thick slice
+                        images, labels, weights = du.create_thick_slices(self.slice_thickness,
+                                                                         images,
+                                                                         labels,
+                                                                         weights)
+
+                        # Append the results
+                        self.images.extend(images)
+                        self.labels.extend(labels)
+                        self.weights.extend(weights)
         else:
             # Load the subjects directly
             self.images, self.labels, self.weights = du.load_subjects(self.subjects,
@@ -80,15 +95,19 @@ class SubjectsDataset(Dataset):
                                                                       self.data_padding,
                                                                       self.slice_thickness,
                                                                       self.lut_labels,
+                                                                      [],
                                                                       self.right_left_dict,
                                                                       self.processing_modality,
                                                                       cfg['loss_function'],
                                                                       mode)
 
-        if self.mode == 'test':
-            self.weights = []
-            self.weights_dict = {}
-        self.weights_dict = {}
+        # if self.mode == 'test':
+        #     self.weights = []
+        #     self.weights_dict = {}
+        # self.weights_dict = {}
+
+        # Save the number of classes
+        self.num_classes = cfg['num_classes']
 
         # Get the length of our Dataset
         self.count = len(self.images)
@@ -149,7 +168,7 @@ class SubjectsDataset(Dataset):
             'image': image,
             'labels': labels,
             'weights': weights,
-            'weights_list': torch.tensor(list(self.weights_dict.values()))
+            'weights_list': du.get_weights_list_from_mask(image, labels, self.num_classes)
         }
 
 
@@ -187,31 +206,20 @@ class InferenceSubjectsDataset(Dataset):
             # Extract: orig (original images), zooms (voxel dimensions)
             try:
                 img = nib.load(subject)
-                img_data = img.get_fdata()
                 zooms = img.header.get_zooms()
             except Exception as e:
                 print(f'Exception loading: {subject}: {e}')
                 continue
 
-            # Save the initial shape of the volume
-            self.initial_shape = img_data.shape
-
             # Compute the output shape
             vox_sizes = cfg['vox_size']
             output_shape = tuple(int(a * b / vox_sizes) for a, b in zip(self.initial_shape, zooms))
 
-            # Transform according to the current plane.
-            # Performed prior to removing blank slices.
-            # img = nib.processing.conform(img,
-            #                              out_shape=output_shape,
-            #                              voxel_size=(vox_sizes, vox_sizes, vox_sizes),
-            #                              order=3,
-            #                              cval=0.0,
-            #                              orientation='RAS',
-            #                              out_class=None)
-            # img_data = img.get_fdata()
+            img_data, affine = du.reorient_resample_volume(img, vox_zoom=1.0, output_shape=output_shape)
+            self.affine = affine
 
-            img_data = du.reorient_resample_volume(img, vox_zoom=1.0)
+            # Save the initial output shape of the volume
+            self.initial_shape = output_shape
 
             # Initialize a transformations list
             transforms_list = []
@@ -245,6 +253,14 @@ class InferenceSubjectsDataset(Dataset):
             else:
                 img_data = np.zeros_like(img_data)
             img_data = np.asarray(img_data, dtype=np.uint8)
+
+            # Change axis according to the desired plan
+            if plane == 'axial':
+                img_data = img_data.transpose((2, 1, 0))
+            elif plane == 'coronal':
+                img_data = img_data.transpose((1, 2, 0))
+            else:
+                img_data = img_data.transpose((0, 2, 1))
 
             # Create an MRI slice window => (D, slice_thickness, H, W)
             if self.slice_thickness > 1:

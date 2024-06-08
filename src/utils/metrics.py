@@ -346,9 +346,24 @@ def get_scores(y_pred: np.ndarray,
                y_true: np.ndarray,
                num_classes: int) -> dict:
     """
-    Computes the following scores: dice, iou, precision, recall, F1 score, accuracy
+    Computes the following evaluation scores: Dice, IoU, Precision, Recall, F1 score, Accuracy.
+
+    Parameters
+    ----------
+    y_pred : np.ndarray
+        Array of predicted class labels.
+    y_true : np.ndarray
+        Array of ground truth class labels.
+    num_classes : int
+        Total number of classes.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the average scores for all classes,
+        subcortical classes (first 33), and cortical classes (rest).
     """
-    # Initialize lists for: Dice Score, IoU, Precision, Recall, F1
+    # Initialize lists to store scores for each class
     dsc = []
     iou = []
     prec = []
@@ -356,12 +371,10 @@ def get_scores(y_pred: np.ndarray,
     f1 = []
     acc = []
 
-    # Compute scores for each class
+    # Compute scores for each class (excluding the background)
     for i in range(1, num_classes):
-        # Get all indexes where class 'i' is found
+        # Boolean arrays where true elements belong to class 'i'
         labels_i = (y_true == i)
-
-        # Get all indexes for which class 'i' has been predicted
         preds_i = (y_pred == i)
 
         # Compute TP, FP, FN, TN
@@ -370,7 +383,7 @@ def get_scores(y_pred: np.ndarray,
         fp = np.sum(~labels_i & preds_i)
         tn = len(y_pred) - tp - fn - fp
 
-        # Compute scores
+        # Append computed scores to corresponding lists
         dsc.append((2 * tp) / (2 * tp + fn + fp))
         iou.append(tp / (tp + fn + fp))
         prec.append(tp / (tp + fp))
@@ -378,6 +391,8 @@ def get_scores(y_pred: np.ndarray,
         f1.append(tp / (tp + (fp + fn) / 2))
         acc.append((tp + tn) / (fn + tp + fp + tn))
 
+    # Return dictionary with average scores for all classes,
+    # subcortical classes (first 33), and cortical classes (remaining)
     return {
         'dsc_mean': np.mean(dsc),
         'dsc_sub': np.mean(dsc[:33]),

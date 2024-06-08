@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset_name',
                         type=str,
-                        default='dataset_splits_test',
+                        default='dataset_revised_test',
                         help='Output path towards the training datasets.')
 
     parser.add_argument('--val_split',
@@ -119,31 +119,35 @@ if __name__ == '__main__':
                 split_group.create_dataset('train', data=split[0], dtype=h5py.special_dtype(vlen=str))
                 split_group.create_dataset('val', data=split[1], dtype=h5py.special_dtype(vlen=str))
 
-        # Save slices, labels and weights for each subject, each orientation (axial, coronal, sagittal)
-        for plane in planes:
-            plane_group = hf.create_group(plane)
+            # Save slices, labels and weights for each subject, each orientation (axial, coronal, sagittal)
             for subject in subject_paths:
                 # Load and save the subjects
-                images, labels, weights = du.load_subjects(subjects=[subject],
-                                                           plane=plane,
-                                                           data_padding=data_padding,
-                                                           slice_thickness=slice_thickness,
-                                                           lut=lut_labels if plane != 'sagittal' else lut_labels_sagittal,
-                                                           right_left_dict=right_left_dict,
-                                                           preprocessing_mode=processing_modality,
-                                                           loss_function=cfg['loss_function'])
+                images, labels, weights, fused_labels, fused_weights = du.load_subjects(subjects=[subject],
+                                                                                        plane='',
+                                                                                        data_padding=data_padding,
+                                                                                        slice_thickness=slice_thickness,
+                                                                                        lut=lut_labels,
+                                                                                        lut_sag=lut_labels_sagittal,
+                                                                                        right_left_dict=right_left_dict,
+                                                                                        preprocessing_mode=processing_modality,
+                                                                                        loss_function=cfg[
+                                                                                            'loss_function'],
+                                                                                        save_hdf5=True)
 
                 # Convert to uint8
                 images = np.asarray(images, dtype=np.uint8)
                 labels = np.asarray(labels, dtype=np.uint8)
                 weights = np.asarray(weights, dtype=float)
+                fused_labels = np.asarray(fused_labels, dtype=np.uint8)
+                fused_weights = np.asarray(fused_weights, dtype=float)
 
                 # Save the subject under the respective plane group within the split
-                subject_group = plane_group.create_group(os.path.basename(subject))
+                subject_group = hf.create_group(os.path.basename(subject))
                 subject_group.create_dataset("images", data=images)
                 subject_group.create_dataset("labels", data=labels)
                 subject_group.create_dataset("weights", data=weights)
-                # plane_group.create_dataset("zooms", data=zooms)  # Unused for the moment
+                subject_group.create_dataset("fused_labels", data=fused_labels)
+                subject_group.create_dataset("fused_weights", data=fused_weights)
 
     # Print success message
     print(f'Dataset {args.dataset_name} was successfully saved.')

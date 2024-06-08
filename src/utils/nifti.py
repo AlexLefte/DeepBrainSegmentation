@@ -3,9 +3,11 @@ import numpy as np
 import os
 
 
-def save_nifti(segmentation_volume, output_file):
+def save_nifti(segmentation_volume, output_file, affine=None):
     # Create a NIfTI image object
-    nifti_img = nib.Nifti1Image(segmentation_volume.astype(np.int16), affine=np.eye(4))
+    if affine is None:
+        affine = np.eye(4)
+    nifti_img = nib.Nifti1Image(segmentation_volume.astype(np.int16), affine=affine)
 
     # Create the directory if it doesn't exist
     output_directory = os.path.dirname(output_file)

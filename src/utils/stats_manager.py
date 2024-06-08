@@ -125,6 +125,23 @@ class StatsManager:
         LOGGER.info(f"Epoch: {epoch} | {mode} loss: {loss:.4f} | {mode} dsc: {dice_mean:.4f} | "
                     f"{mode} accuracy: {accuracy:.4f}")
 
+        if mode == 'Val':
+            dice_scores = get_class_dsc(y_pred_flat,
+                                        y_true_flat,
+                                        self.num_classes,
+                                        return_mean=False)
+            LOGGER.info(f"{mode} mode DSC results:")
+            for i in range(self.num_classes):
+                LOGGER.info(f"Class {i} dice score: {dice_scores[i]}")
+
+            # Compute all scores
+            scores = get_scores(y_pred_flat,
+                                y_true_flat,
+                                self.num_classes)
+            LOGGER.info(f"\n{mode} Scores:")
+            for score, score_val in scores.items():
+                LOGGER.info(f"{score}: {score_val}")
+
         # Log the confusion matrix at the end of the training session
         if epoch == self.epochs - 1:
             dice_scores = get_class_dsc(y_pred_flat,
@@ -143,13 +160,13 @@ class StatsManager:
             for score, score_val in scores.items():
                 LOGGER.info(f"{score}: {score_val}")
 
-            # Write the average Hausdorff distance
-            avg_hd_results = get_cort_subcort_avg_hausdorff(y_pred_flat,
-                                                            y_true_flat,
-                                                            self.num_classes)
-            LOGGER.info(f"{mode} mode Avg Hausdorff Distance results:")
-            for key, value in avg_hd_results.items():
-                LOGGER.info(f"{key}: {value}")
+            # # Write the average Hausdorff distance
+            # avg_hd_results = get_cort_subcort_avg_hausdorff(y_pred_flat,
+            #                                                 y_true_flat,
+            #                                                 self.num_classes)
+            # LOGGER.info(f"{mode} mode Avg Hausdorff Distance results:")
+            # for key, value in avg_hd_results.items():
+            #     LOGGER.info(f"{key}: {value}")
 
             # Compute and save the confusion matrix
             cf_matr = get_confusion_matrix(y_pred_flat,

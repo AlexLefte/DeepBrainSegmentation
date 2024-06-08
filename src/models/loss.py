@@ -26,7 +26,7 @@ def get_loss_fn(cfg: dict):
     if loss_type == 'dice_loss_&_cross_entropy':
         loss_fn = CombinedLoss()
     elif loss_type == 'unified_focal_loss':
-        loss_fn = Unified_CatFocal_FocalTversky(gamma=cfg['loss_gamma'])
+        loss_fn = CombinedFocalLoss(gamma=cfg['loss_gamma'])
 
     # Return loss function
     return loss_fn
@@ -256,111 +256,93 @@ class DiceLoss2(nn.Module):
 
 class CategoricalFocalLoss(nn.Module):
     """
-    Implements the focal loss
-    href: https://www.sciencedirect.com/science/article/pii/S0895611121001750
+    Implements the focal loss for handling class imbalance in classification tasks.
+    Reference: https://www.sciencedirect.com/science/article/pii/S0895611121001750
+
+    The focal loss focuses on hard-to-classify examples by down-weighting the loss for well-classified examples and up-weighting for those that are misclassified.
     """
     def __init__(self,
-                 alpha: float = 0.7,
                  gamma: float = 2,
                  device: str = 'cpu',
-                 suppress_bkg: bool = False):
+                 suppress_bkg: bool = False,
+                 eps: float = 1e-6):
         """
         Constructor
 
         Parameters
         ----------
-        alpha: float
-            Places a greater penalty on false negatives, rather on false positives
         gamma: float or tensor-like of shape (C)
-            Down-weighting exponent
+            The focusing parameter that reduces the loss contribution from easy examples (background)
         device: str
-            Training device
+            The device on which the training is performed, e.g., 'cpu' or 'cuda'.
         suppress_bkg: bool
-            True if we want to place a greater penalty on false positives for the background class
+            A flag indicating whether to apply additional suppression on the background class
+        eps: float
+            Small constant to avoid division by zero.
         """
         super(CategoricalFocalLoss, self).__init__()
-        self.alpha = alpha
         self.gamma = gamma
         self.device = device
         self.suppress_bkg = suppress_bkg
+        self.eps = eps
 
     def forward(self,
                 y_pred: Tensor,
                 y_true: Tensor,
-                weights: Tensor,
-                weights_list: Tensor):
+                alpha: Tensor):
         """
         Forward method
 
         Parameters
         ----------
-        y_pred: tensor-like of shape (D, C, H, W)
-            Prediction logits
-        y_true: tensor-like of shape (D, H, W)
-            Ground truth
-        weights: Tensor-like of shape: (D, C, H, W)
-            Class weights
-        weights_list: Tensor-like of shape (, 79)
-            Class weights list
+        y_pred: Tensor
+            Predicted logits, shape: (D, C, H, W).
+        y_true: Tensor
+            Ground truth labels, shape: (D, H, W).
+        alpha: Tensor
+            Class weights mask, shape: (D, C, H, W).
         """
-        # Get the number of classes
+        # Get the number of classes from the prediction logits
         c = y_pred.shape[1]
 
-        # Get the one-hot encoded version of the ground truth tensor
+        # Compute the one-hot encoded version of the ground truth tensor
         y_true_encoded = get_one_hot_encoded(t=y_true,
                                              classes_num=c)
 
-        # Prepare the class weights tensor and the gamma tensor
-        # if self.alpha is float:
-        #     alpha = torch.ones(c) * self.alpha
-        # if self.gamma is float:
-        #     self.gamma = torch.ones(c) * self.gamma
-
-        # Compute the cross_entropy
-        ce = -y_true_encoded * torch.log(y_pred + 0.000001)
+        # Compute the cross_entropy loss
+        ce = -y_true_encoded * torch.log(y_pred + self.eps)
 
         if self.suppress_bkg:
-            # Compute the background loss
+            # Suppress the background loss component
             bkg_probs = y_pred[:, 0, :, :]
             bkg_ce = ce[:, 0, :, :]
-            # bkg_loss = (1 - self.alpha) * torch.pow(1 - bkg_probs, self.gamma) * bkg_ce
             bkg_loss = torch.pow(1 - bkg_probs, self.gamma) * bkg_ce
             bkg_loss = bkg_loss.unsqueeze(dim=1)
 
-            # Compute the foreground loss
+            # Concatenate back the background and the foreground classes
             fg_ce = ce[:, 1:, :, :]
-            # fg_loss = self.alpha * fg_ce
-            fg_loss = fg_ce
-
-            # print(f'Bg ce: {str(bkg_ce)}, fg ce: {str(fg_ce)}')
-            # bkg_print_loss = torch.mean(torch.sum(bkg_loss, dim=1))
-            # fg_print_loss = torch.mean(torch.sum(fg_loss, dim=1))
-            # print(f'Bg loss: {str(bkg_print_loss)}, fg loss: {str(fg_print_loss)}')
-
-            # Stack these losses
-            focal_loss = torch.cat(([bkg_loss, fg_loss]), dim=1)
+            focal_loss = torch.cat(([bkg_loss, fg_ce]), dim=1)
         else:
-            self.alpha = weights
-
-            # Compute the modulating_factor
+            # Compute the modulating factor
             modulating_factor = (1 - y_pred) ** self.gamma
 
             # Compute the categorical focal loss
             focal_loss = modulating_factor * ce
 
-        # Return the mean loss
-        self.alpha = weights
-        focal_loss = torch.mean(self.alpha * torch.sum(focal_loss, dim=1))
+        # Multiply by class weights, sum across classes, and then average.
+        focal_loss = torch.mean(alpha * torch.sum(focal_loss, dim=1))
         return focal_loss
 
 
 class FocalTverskyLoss(nn.Module):
     """
-    Implements the focal Tversky loss
-    href: https://www.sciencedirect.com/science/article/pii/S0895611121001750
+    Implements the focal Tversky loss function.
+    Reference: https://www.sciencedirect.com/science/article/pii/S0895611121001750
+
+    The focal Tversky loss is designed to handle imbalanced datasets by focusing more on hard-to-classify examples and
+    penalizing false negatives more than false positives for foreground classes.
     """
     def __init__(self,
-                 alpha: float = 0.7,
                  gamma: float = 3 / 4,
                  device: str = 'cpu',
                  eps: float = 0.000001,
@@ -370,74 +352,73 @@ class FocalTverskyLoss(nn.Module):
 
         Parameters
         ----------
-        alpha: float
-            Increasing the alpha factor places a greater penalty on false negatives compared to false positives.
         gamma: float or tensor-like of shape (C)
-            Down-weighting exponent
+            Rare class enhancement exponent
         device: str
-            Training device
+            Training device (e.g., 'cpu' or 'cuda').
         eps: float
-            Smoothing factor to avoid 0 division.
+            Small constant to avoid division by zero.
         suppress_bkg: bool
-            Factor that signals whether to suppress the background and enhance the foreground
+            Flag indicating whether to enhance the focus on foreground classes.
         """
-        self.alpha = alpha
         super().__init__()
         self.gamma = gamma
         self.device = device
         self.eps = eps
-        self.suppress_bkg = suppress_bkg
+        self.enhance_fg = suppress_bkg
 
     def forward(self,
                 y_pred: Tensor,
                 y_true: Tensor,
-                weights: Tensor,
-                weights_list: Tensor):
+                alpha: Tensor):
         """
         Forward method
 
         Parameters
         ----------
-        y_pred: tensor-like of shape (D, C, H, W)
-            Prediction logits
-        y_true: tensor-like of shape (D, H, W)
-            Ground truth
-        weights: Tensor-like of shape: (D, C, H, W)
-            Class weights
-        weights_list: Tensor-like of shape (, 79)
-            Class weights list
+        y_pred: Tensor
+            Predicted logits, shape: (D, C, H, W).
+        y_true: Tensor
+            Ground truth labels, shape: (D, H, W).
+        alpha: Tensor
+            Class weights list, shape: (, C).
         """
-        # Compute the one-hot-encoded version of the ground truth tensor
+        # Compute the one-hot-encoded version of the ground truth tensor => Tensor with shape (D, C, H, W)
         y_true_encoded = get_one_hot_encoded(y_true, y_pred.shape[1])
 
-        # Compute tp (True Positives), fp (False Positives) and fn (False Negatives)
+        # Compute TP (True Positives), FP (False Positives) and FN (False Negatives)
         tp = torch.sum(y_pred * y_true_encoded, dim=(0, 2, 3))
         fp = torch.sum((1 - y_true_encoded) * y_pred, dim=(0, 2, 3))
         fn = torch.sum(y_true_encoded * (1 - y_pred), dim=(0, 2, 3))
 
-        # Compute the Trevsky indexes (TI)
-        tversky_idxs = tp / (tp + self.alpha * fn + (1 - self.alpha) * fp + self.eps)
+        # Compute the Tversky indexes (TI)
+        tversky_idxs = tp / (tp + alpha * fn + (1 - alpha) * fp + self.eps)
 
-        if self.suppress_bkg:
+        # Check if we need to enhance foreground classes
+        if self.enhance_fg:
             bkg_tversky = (1 - tversky_idxs[0]).unsqueeze(dim=0)
-            # print('Bkg tverski loss: ' + str(torch.mean(bkg_tversky)))
+
+            # Apply the enhancement to the foreground classes
             fg_tversky = (1 - tversky_idxs[1:]) * ((1 - tversky_idxs[1:]) ** (-self.gamma))
-            # print('Fg tverski loss: ' + str(torch.mean(fg_tversky)))
+
+            # Concatenate the background and foreground values back together
             focal_tversky_loss = torch.cat(([bkg_tversky, fg_tversky]), dim=0)
         else:
             # Compute the Focal Tversky Loss per class
             focal_tversky_loss = (1 - tversky_idxs) ** self.gamma
 
-        # Return the average loss
+        # Return the mean focal Tversky loss across all classes
         return torch.mean(focal_tversky_loss)
 
 
-class Unified_CatFocal_FocalTversky(nn.Module):
+class CombinedFocalLoss(nn.Module):
     """
     Implements the asymmetric unified focal loss from:
     https://www.sciencedirect.com/science/article/pii/S0895611121001750
-    """
 
+    This class combines two types of focal losses: Categorical Focal Loss and Focal Tversky Loss.
+    It is designed to handle imbalanced datasets by putting more focus on hard-to-classify examples.
+    """
     def __init__(self,
                  alpha: float = 0.6,
                  lmbd: float = 0.5,
@@ -447,22 +428,24 @@ class Unified_CatFocal_FocalTversky(nn.Module):
 
         Parameters
         ----------
-        alpha: Float
-            Places a greater penalty on false negatives, rather on false positives
-        lmbd: float
-            Controls the weight given to the asymmetric Categorical Focal loss and the asymmetric Focal Tversky
-        gamma:
-            Controls both the background suppression and the foreground enhancement
+        alpha : float
+            Penalty parameter that gives higher weight to false negatives compared to false positives.
+        lmbd : float
+            Weight balancing parameter between the asymmetric Categorical Focal loss and the Focal Tversky loss.
+        gamma : float
+            Parameter controlling the suppression of background classes and enhancement of foreground classes.
         """
         super().__init__()
         self.alpha = alpha
         self.lmbd = lmbd
         self.gamma = gamma
-        self.categorical_focal = CategoricalFocalLoss(alpha=alpha,
-                                                      gamma=1/gamma,
+
+        # Initialize the Categorical Focal Loss with specified alpha and gamma parameters
+        self.categorical_focal = CategoricalFocalLoss(gamma=1/gamma,
                                                       suppress_bkg=True)
-        self.focal_tverski = FocalTverskyLoss(alpha=alpha,
-                                              gamma=gamma,
+
+        # Initialize the Focal Tversky Loss with specified alpha and gamma parameters
+        self.focal_tverski = FocalTverskyLoss(gamma=gamma,
                                               suppress_bkg=True)
 
     def forward(self,
@@ -475,26 +458,34 @@ class Unified_CatFocal_FocalTversky(nn.Module):
 
         Parameters
         ----------
-        y_pred: Tensor-like of shape: (D, C, H, W)
-            Prediction logits
-        y_true: Tensor-like of shape: (D, H, W)
-            Labels
-        weights: Tensor-like of shape: (D, C, H, W)
-            Class weights
-        weights_list: Tensor-like of shape (, 79)
-            Class weights list
+        y_pred: Tensor
+            Predicted logits, shape: (D, C, H, W).
+        y_true: Tensor
+            Ground truth labels, shape: (D, H, W).
+        weights: Tensor
+            Class weights, shape: (D, C, H, W).
+        weights_list: Tensor
+            Class weights list, shape: (, 79).
+
+        Returns
+        -------
+        Combined loss : float
+            Sum of Categorical Focal Loss and Focal Tversky Loss.
         """
+        # Apply softmax to the predicted logits to obtain probabilities
         y_pred = torch.softmax(input=y_pred, dim=1)
 
+        # Compute the Categorical Focal Loss
         cat_focal_loss = self.categorical_focal(y_pred=y_pred,
                                                 y_true=y_true,
-                                                weights=weights,
-                                                weights_list=weights_list)
+                                                alpha=weights)
+
+        # Compute the Focal Tversky Loss
         tverski_loss = self.focal_tverski(y_pred=y_pred,
                                           y_true=y_true,
-                                          weights=weights,
-                                          weights_list=weights_list)
+                                          alpha=weights_list)
 
+        # Return the sum of the two losses
         return cat_focal_loss + tverski_loss
 
 

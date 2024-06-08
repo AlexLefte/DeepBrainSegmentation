@@ -148,10 +148,12 @@ def run_inference(models: dict,
         LOGGER.info(f'Running inference on {file_name}')
 
         aggregated_pred = None
+        affine = None
 
         for plane, model in models.items():
             # Create an inference loader
             loader = get_inference_data_loader(subject, cfg, plane)
+            affine = loader.dataset.affine
 
             # Prediction list
             pred_list = []
@@ -202,10 +204,10 @@ def run_inference(models: dict,
         pred_classes = np.argmax(aggregated_pred, axis=1).astype(np.uint8)
 
         # Map back to the initial LUT (FreeSurfer)
-        pred_classes = du.labels2lut(pred_classes, lut_labels_dict)
+        # pred_classes = du.labels2lut(pred_classes, lut_labels_dict)
 
         # Relateralize the volume
-        pred_classes = du.lateralize_volume(pred_classes)
+        # pred_classes = du.lateralize_volume(pred_classes)
 
         # Append the prediction
         predictions[subject] = pred_classes
@@ -214,7 +216,8 @@ def run_inference(models: dict,
     save_predictions(predictions,
                      predictions_before_aggregation,
                      output_path,
-                     lut['ID'].values)
+                     lut['ID'].values,
+                     affine)
 
     return predictions, predictions_before_aggregation
 
@@ -245,34 +248,51 @@ def run_test(models: dict,
     labels = nib.load(labels_path)
     # labels = np.asarray(labels.get_fdata(), dtype=np.int16).flatten()
 
-    labels = du.reorient_resample_volume(labels, vox_zoom=1.0, interpolation_order=0)
-    labels = np.asarray(labels, dtype=np.int16).flatten()
+    labels, affine = du.reorient_resample_volume(labels, vox_zoom=1.0, interpolation_order=0)
+    save_nifti(labels, f'/home/alex/PycharmProjects/DeepBrainSegmentation/output/labels_conformed.nii', affine=affine)
+    flat_labels = np.asarray(labels, dtype=np.int16).flatten()
 
-    cortical_classes = [1003, 1006, 1007, 1008, 1009, 1011, 1015, 1018, 1019, 1020, 1021, 1025, 1026, 1027,
-                        1029, 1030, 1031, 1034, 1035]
-    cortical_classes.extend(du.get_lut(args.lut)['ID'])
-    # Process the labels: unknown => background
-    mask = ~np.isin(labels, cortical_classes)
-    # Use the mask to replace elements with 0
-    labels[mask] = 0
+    # cortical_classes = [1003, 1006, 1007, 1008, 1009, 1011, 1015, 1018, 1019, 1020, 1021, 1025, 1026, 1027,
+    #                     1029, 1030, 1031, 1034, 1035]
+    # cortical_classes.extend(du.get_lut(args.lut)['ID'])
+    # # Process the labels: unknown => background
+    # mask = ~np.isin(labels, cortical_classes)
+    # # Use the mask to replace elements with 0
+    # labels[mask] = 0
 
     # # TODO: Just for the moment we will get the labels into the 0-78 range. Remove afterwards.
-    # lut = du.get_lut(args.lut)
-    # right_left_dict = du.get_right_left_dict(lut)
-    # labels = du.lut2labels(labels=labels,
-    #                        lut_labels=lut["ID"].values,
-    #                        right_left_map=right_left_dict,
-    #                        plane='coronal')
-    # labels = labels.flatten()
+    lut = du.get_lut(args.lut)
+    right_left_dict = du.get_right_left_dict(lut)
+    labels = du.lut2labels(labels=flat_labels,
+                           lut_labels=lut["ID"].values,
+                           right_left_map=right_left_dict,
+                           plane='coronal')
+    sag_labels = du.lut2labels(labels=flat_labels,
+                               lut_labels=du.get_sagittal_labels_from_lut(lut),
+                               right_left_map=right_left_dict,
+                               plane='sagittal')
+    labels = labels.flatten()
+    sag_labels = sag_labels.flatten()
 
     # Compute the dsc for each of them:
     dsc = {}
     for key, flat_pred in flat_preds.items():
+        if key == 'sagittal':
+            num_classes = 51
+            temp_labels = sag_labels
+        else:
+            num_classes = 79
+            temp_labels = labels
+
         dsc_tuple = get_cortical_subcortical_class_dsc(y_pred=flat_pred,
-                                                       y_true=labels,
-                                                       num_classes=95)
+                                                       y_true=temp_labels,
+                                                       num_classes=num_classes)
                                                        # classes=cortical_classes)
         dsc[key] = dsc_tuple
+
+        dsc = get_class_dsc(y_pred=flat_pred,
+                            y_true=temp_labels,
+                            num_classes=num_classes)
 
     # Print some results
     for key, dice_scores in dsc.items():
@@ -282,12 +302,20 @@ def run_test(models: dict,
     # Other scores
     scores = {}
     for key, flat_pred in flat_preds.items():
-        scores_dict = get_scores(y_pred=flat_pred,
-                                 y_true=labels,
-                                 num_classes=95)
+        if key == 'sagittal':
+            num_classes = 51
+            scores_dict = get_scores(y_pred=flat_pred,
+                                     y_true=sag_labels,
+                                     num_classes=num_classes)
+        else:
+            num_classes = 79
+            scores_dict = get_scores(y_pred=flat_pred,
+                                     y_true=labels,
+                                     num_classes=num_classes)
+
         scores[key] = scores_dict
-    for key, scores in dsc.items():
-        for k, v in scores:
+    for key, s in scores.items():
+        for k, v in s.items():
             print(f'Score {k}: {v}')
 
     end_time = time.time()
@@ -298,7 +326,8 @@ def run_test(models: dict,
 def save_predictions(predictions: dict,
                      predictions_without_aggregation: dict,
                      output_path: str,
-                     lut: list):
+                     lut: list,
+                     affine=None):
     for subject, prediction in predictions.items():
         prediction = du.get_lut_from_labels(prediction,
                                             lut)
@@ -320,12 +349,12 @@ if __name__ == '__main__':
     # Inference settings
     parser.add_argument('--input_path',
                         type=str,
-                        default='dataset/OASIS-TRT-20-8/t1weighted.nii.gz',
+                        default='dataset/HLN-12-5/t1weighted.nii.gz',
                         help='Path towards the input file/directory')
 
     parser.add_argument('--labels_path',
                         type=str,
-                        default='dataset/OASIS-TRT-20-8/labels.DKT31.manual+aseg.nii.gz',
+                        default='dataset/HLN-12-5/labels.DKT31.manual+aseg.nii.gz',
                         help='Path towards the labels file/directory')
 
     parser.add_argument('--output_path',

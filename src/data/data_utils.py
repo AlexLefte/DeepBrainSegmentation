@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import torch.utils.data
 import torchio as tio
 import nibabel.orientations as orientations
+from scipy.ndimage import affine_transform
+from numpy.linalg import inv
 import logging
 import random
 from skimage import measure
@@ -116,6 +118,39 @@ def get_weights_list(labels: np.ndarray,
     return weights
 
 
+def get_weights_list_from_mask(labels: torch.Tensor,
+                               weights_mask: torch.Tensor,
+                               num_classes: int):
+    """
+    Returns a list of weights for each class based on the class labels and weights mask.
+
+    Parameters
+    ----------
+    labels : torch.Tensor
+        Tensor of class labels.
+
+    weights_mask : torch.Tensor
+        Tensor of weights corresponding to the class labels.
+
+    num_classes : int
+        Total number of classes.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor of weights for each class.
+    """
+    # Initialize the class weights list with zeros
+    class_weights = [0] * num_classes
+
+    # Assign the weight for each class, if present in labels
+    for class_idx in range(num_classes):
+        if class_idx in labels:
+            class_weights[class_idx] = weights_mask[labels == class_idx][0]
+
+    return torch.tensor(class_weights)
+
+
 def compute_median_frequency_balanced_weights(class_weights: dict):
     """
     Computes median frequency balanced weights
@@ -134,30 +169,38 @@ def compute_median_frequency_balanced_weights(class_weights: dict):
 def compute_non_linear_weights(class_weights: dict,
                                r: float = 5):
     """
-    Inverts the classes frequencies and
+    Computes non-linear weights for each class based on their frequencies.
 
     Parameters
     ----------
-    class_weights: dict
-        Class weight dictionary - initially containing the class absolute frequencies
-    r: float
-        Parameter that affects the non-linear transform
+    class_weights : dict
+        Dictionary where keys are class labels and values are initial class frequencies.
+    r : float
+        Parameter controlling the non-linear transformation applied to class weights.
+
+    Returns
+    -------
+    dict
+        Dictionary with updated class weights.
     """
-    # Compute each weight
+    # Step 1: Invert the frequencies for all classes, except for the background class
+    class_freqs = list(class_weights.values())[1:]
+    class_freqs = [float(1 / c) for c in class_freqs]
     for label, weight in class_weights.items():
         class_weights[label] = 1 / class_weights[label]
 
-    # Identify the most frequent foreground weight
+    # Step 2: Apply a non-linear transformation to foreground class weights.
     fg_min_weight = min(list(class_weights.values())[1:])
+    fg_max_weight = max(list(class_weights.values())[1:])
 
-    # Apply a non-linear transformation
     for label, weight in class_weights.items():
         if label != 0:
-            class_weights[label] = 1 - (1 - fg_min_weight) * (((1 - class_weights[label]) / (1 - fg_min_weight)) ** r)
+            class_weights[label] = fg_max_weight - (fg_max_weight - fg_min_weight) * (
+                        ((fg_max_weight - class_weights[label]) / (fg_max_weight - fg_min_weight)) ** r)
         else:
             class_weights[0] = 0.1
 
-    # Normalize in range [0.6, 0.9]
+    # Step 3: Normalize transformed weights to the range [0.6, 0.9].
     min_transformed_weight = min(list(class_weights.values())[1:])
     max_transformed_weight = max(list(class_weights.values())[1:])
 
@@ -166,7 +209,39 @@ def compute_non_linear_weights(class_weights: dict,
             class_weights[label] = 0.6 + 0.3 * ((class_weights[label] - min_transformed_weight) / (
                     max_transformed_weight - min_transformed_weight))
 
-    # Return the dictionary
+    x = np.linspace(min(class_freqs), max(class_freqs), 10000)  # 500 de puncte între 1 și 100
+
+    # Calculăm class_weights[label] pentru fiecare x
+    b = np.zeros_like(x)
+    for i, x_temp in enumerate(x):
+        if x_temp < fg_min_weight:
+            b[i] = fg_min_weight * ((x_temp / fg_min_weight) ** r)
+        else:
+            b[i] = fg_max_weight - (fg_max_weight - fg_min_weight) * (
+                        ((fg_max_weight - x_temp) / (fg_max_weight - fg_min_weight)) ** r)
+
+    # Calculăm valorile finale pentru plotare
+    min_val = min(b)
+    max_val = max(b)
+    final_values = 0.6 + 0.3 * ((b - min(b)) / (
+            max(b) - min(b)))
+
+    to_plot = {}
+    for i, f in enumerate(class_freqs):
+        to_plot[f] = class_weights[i + 1]
+
+    # plt.figure(figsize=(10, 5))
+    # plt.plot(x, final_values, zorder=1)
+    # plt.scatter(to_plot.keys(), to_plot.values(), color='red', label='wi',
+    #             zorder=2)  # Scatter plot of dictionary values
+    # plt.title('wi = f(1 / fi)')
+    # plt.xlabel('1 / fi')
+    # plt.ylabel('wi')
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
+
+    # Return the updated class weights.
     return class_weights
 
 
@@ -458,16 +533,19 @@ def plot_slices(slices: list, title: str = ''):
 # region Loading and Preprocessing Data
 def remove_blank_slices(images: np.ndarray,
                         labels: np.ndarray,
+                        weights: np.ndarray,
                         threshold: int = 5):
     """
     Removes slices with very few labeled voxels.
 
     Parameters
     ----------
-    images:
+    images: ndarray
         the MRI volume as a
-    labels:
+    labels: ndarray
         the labeled volume
+    weights: ndarray
+        the weights masks
     threshold:
         the minimum number of foreground pixels a slice has to accomplish in order to be kept
 
@@ -482,7 +560,7 @@ def remove_blank_slices(images: np.ndarray,
     selected_slices = np.where(slices_nonzero_counts > threshold)
 
     # Return the selected slices
-    return images[selected_slices], labels[selected_slices]
+    return images[selected_slices], labels[selected_slices], weights[selected_slices]
 
 
 def crop_or_pad(image: np.ndarray, labels: np.ndarray, target_shape: list) -> (np.ndarray, np.ndarray):
@@ -595,46 +673,113 @@ def fix_orientation_and_voxel_size(img,
                                    labels,
                                    plane: str = 'coronal',
                                    out_shape: tuple = (256, 256, 256),
-                                   vox_size: tuple = (1.0, 1.0, 1.0)) -> tuple:
+                                   vox_size: float = 1.0) -> tuple:
     """
-    Permutes the axis depending on the plane to ensure the same orientation
-    is respected (assuming the scan si aligned to MNI152)
-    """
-    # Change images and labels orientation
-    reoriented_img = nib.processing.conform(img,
-                                            out_shape=out_shape,
-                                            voxel_size=vox_size,
-                                            order=3,
-                                            cval=0.0,
-                                            orientation='RAS',
-                                            out_class=None)
-    reoriented_labels = nib.processing.conform(labels,
-                                               out_shape=out_shape,
-                                               voxel_size=vox_size,
-                                               order=3,
-                                               cval=0.0,
-                                               orientation='RAS',
-                                               out_class=None)
+    Aligns an MRI image and its corresponding labels with the RAS+ orientation by applying a 3D affine transformation.
+    Depending on the specified 'plane', the function also permutes the axes to maintain consistent orientation across
+    different imaging planes.
 
-    # Extract data
-    img = np.asarray(reoriented_img.get_fdata(), dtype=np.uint8)
-    labels = np.asarray(reoriented_labels.get_fdata(), dtype=np.int16)
+    Parameters
+    ----------
+    img : ndarray
+        The original T1-weighted MRI volume.
+    labels : ndarray
+        The volume containing labeled regions of interest.
+    plane : str, optional
+        The anatomical plane (e.g., 'coronal', 'sagittal', 'axial') that influences the permutation of the axes.
+        Default is 'coronal'.
+    out_shape : tuple of int, optional
+        The desired dimensions of the output volume (width, height, depth), defaulting to (256, 256, 256).
+    vox_size : float, optional
+        The isotropic spatial resolution in millimeters for each axis of the output volume, default is 1.0 mm.
+
+    Returns
+    -------
+    tuple of ndarray
+        The transformed MRI volume and label volume, both adjusted to the specified output shape and voxel size,
+        aligned to the RAS+ space.
+    """
+    # Align the volumes to the RAS+ space and resample
+    img, _ = reorient_resample_volume(img, vox_size, out_shape)
+    labels, _ = reorient_resample_volume(labels, vox_size, out_shape, interpolation_order=0)
 
     # Change axis according to the desired plan
-    if plane == 'axial':
-        img = img.transpose((2, 1, 0))
-        labels = labels.transpose((2, 1, 0))
-    elif plane == 'coronal':
-        img = img.transpose((1, 2, 0))
-        labels = labels.transpose((1, 2, 0))
-    else:
-        img = img.transpose((0, 2, 1))
-        labels = labels.transpose((0, 2, 1))
+    apply_plane_orientation([img, labels], plane)
 
-    if img.shape != labels.shape:
-        print("Image and labels shapes must be equal.")
+    # Ensure image shapes coincide
+    assert img.shape == labels.shape, "Image and labels shapes must be equal."
 
     return img, labels
+
+
+def reorient_resample_volume(volume: nib.Nifti1Image,
+                             vox_zoom,
+                             output_shape: tuple = (256, 256, 256),
+                             interpolation_order: int = 1):
+    """
+        Reorients and resamples a 3D MRI volume to a specified voxel size and output shape.
+
+        This function takes an MRI volume, reorients it to the standard anatomical orientation RAS+,
+        and resamples it to a new voxel size and shape. The output volume has the dimensions specified
+        in 'output_shape' and maintains the new voxel resolution defined by 'vox_zoom'.
+
+        Parameters
+        ----------
+        volume : nib.Nifti1Image
+            The input MRI volume in NIfTI format to be reoriented and resampled.
+        vox_zoom : float
+            The desired voxel size (in mm). The voxel size defines the spatial resolution of the resampled image on
+            all three axes
+        output_shape : tuple of int, optional
+            The dimensions (width, height, depth) of the output volume in voxels, by default (256, 256, 256).
+        interpolation_order : int, optional
+            The order of the spline interpolation to be used for resampling. The default is 1, which corresponds to
+            linear interpolation. Higher values provide more accurate interpolation at the cost of computational resources.
+
+        Returns
+        -------
+        ndarray
+            The reoriented and resampled MRI volume as an ndarray, with the specified voxel size and output dimensions.
+    """
+    # Change images orientation and resample
+    # 1) Compute the center coordinates vector in the current XYZ space (in mm)
+    # Get the midpoint in voxel coordinates and convert to homogeneous coordinates
+    vol_center = np.hstack((np.array(volume.shape) / 2.0, [1]))
+    # Transform the voxel midpoint to real-world coordinates using the volume's affine matrix
+    center_xyz = np.dot(volume.affine, vol_center)
+
+    # 2) Calculate the new volume center in the target isotropic space (256x256x256 mm)
+    # Compute the center in real-world coordinates based on the desired output shape and voxel
+    vol_center = [s / 2 * z for s, z in zip(output_shape, (vox_zoom, vox_zoom, vox_zoom))]
+
+    # 3) Define the affine transform that maps new voxel space coordinates to real-world coordinates
+    # Create an affine transformation matrix where each voxel corresponds to the specified voxel size
+    # and the center of the volume is aligned with the new center coordinates
+    a = np.array([[vox_zoom, 0, 0, center_xyz[0] - vol_center[0]],
+                  [0, vox_zoom, 0, center_xyz[1] - vol_center[1]],
+                  [0, 0, vox_zoom, center_xyz[2] - vol_center[2]],
+                  [0, 0, 0, 1]])
+
+    # 4) Compute the compound affine that maps current voxel coordinates to new voxel space
+    # Note: Affine transformations are applied in reverse order when composing them
+    b = inv(a) @ volume.affine
+
+    # 5) Apply the compound affine matrix and resample the image
+    # Use scipy's affine_transform to resample the image data according to the computed affine transformation
+    img_data = volume.get_fdata()
+    reoriented_volume = affine_transform(img_data, inv(b), output_shape=output_shape, order=interpolation_order)
+
+    return reoriented_volume, a
+
+
+def apply_plane_orientation(images: list, plane: str):
+    for i in range(len(images)):
+        if plane == 'axial':
+            images[i][:] = images[i].transpose((2, 1, 0))
+        elif plane == 'coronal':
+            images[i][:] = images[i].transpose((1, 2, 0))
+        elif plane == 'sagittal':
+            images[i][:] = images[i].transpose((0, 2, 1))
 
 
 def fix_orientation_inference(img, plane):
@@ -672,10 +817,12 @@ def load_subjects(subjects: list,
                   data_padding: list,
                   slice_thickness: int,
                   lut: list,
+                  lut_sag: list,
                   right_left_dict: dict,
                   preprocessing_mode: str,
                   loss_function: str,
-                  mode: str = ''):
+                  mode: str = '',
+                  save_hdf5: bool = False):
     # Lists for images, labels, label weights, and zooms
     images = []
     labels = []
@@ -687,20 +834,10 @@ def load_subjects(subjects: list,
         # FreeSurfer convention), zooms (voxel dimensions)
         try:
             img = nib.load(os.path.join(subject, ORIG))
-            img_data = img.get_fdata()
             img_labels = nib.load(os.path.join(subject, LABELS))
         except Exception as e:
             print(f'Exception loading: {subject}: {e}')
             continue
-
-        # Normalize the images to [0.0, 255.0]
-        min_val = np.min(img_data)
-        max_val = np.max(img_data)
-        if min_val != max_val:
-            img_data = (img_data - min_val) * (255 / (max_val - min_val))
-        else:
-            img_data = np.zeros_like(img_data)
-        img = nib.Nifti1Image(img_data, img.affine, img.header)
 
         # Transform according to the current plane.
         # Performed prior to removing blank slices.
@@ -708,28 +845,47 @@ def load_subjects(subjects: list,
                                                               img_labels,
                                                               plane)
 
-        # Preprocess the data (based on statistics of the entire dataset)
-        # img_data = preprocess_subject(img_data,
-        #                               preprocessing_mode,
-        #                               data_padding)
+        if preprocessing_mode is not None:
+            # Initialize a transformations list
+            transforms_list = []
+
+            # 2) Normalize
+            transforms_list.extend(get_norm_transforms(preprocessing_mode))
+
+            # 3) Apply transformations:
+            # Stack all images into a single 3D array
+            stacked_images = np.expand_dims(img_data, axis=0)
+
+            # Create a TorchIO ScalarImage instance
+            image = tio.ScalarImage(tensor=stacked_images)
+
+            # Apply each transformation
+            for transform in transforms_list:
+                image = transform(image)
+
+            # Retrieve the transformed NumPy array
+            transformed_image_array = image.data.numpy()
+
+            # Split the transformed array back into individual slices
+            img_data = np.squeeze(transformed_image_array)
+
+        # Normalize to [0, 255]
+        min_val = np.min(img_data)
+        max_val = np.max(img_data)
+        if min_val != max_val:
+            img_data = (img_data - min_val) * (255 / (max_val - min_val))
+        else:
+            img_data = np.zeros_like(img_data)
+
+        # Convert to uint8 and int16 respectively
+        img_data = np.asarray(img_data, dtype=np.uint8)
+        img_labels = np.asarray(img_labels, dtype=np.int16)
 
         # Add Gaussian Noise on training data
         # if mode == 'train':
         #     img_data = add_gaussian_noise(data=img_data,
         #                                   std_dev=5,
         #                                   mean=0)
-
-        # Create an MRI slice window => (D, slice_thickness, H, W)
-        if slice_thickness > 1:
-            img_data = get_thick_slices(img_data,
-                                        slice_thickness)
-            img_data = img_data.transpose((0, 3, 1, 2))
-        else:
-            img_data = np.expand_dims(img_data, axis=1)
-
-        # Remove blank slices
-        img_data, img_labels = remove_blank_slices(images=img_data,
-                                                   labels=img_labels)
 
         # Map the labels starting with 0
         new_labels = lut2labels(labels=img_labels,
@@ -740,6 +896,22 @@ def load_subjects(subjects: list,
         # Compute class weights
         weights_array = compute_weights(new_labels,
                                         loss_function)
+        if save_hdf5:
+            # Save the fused labels and weights as well
+            fused_labels = lut2labels(labels=img_labels,
+                                      lut_labels=lut_sag,
+                                      right_left_map=right_left_dict,
+                                      plane=plane)
+            fused_weights = compute_weights(fused_labels,
+                                            loss_function)
+            return img_data, new_labels, weights_array, fused_labels, fused_weights
+
+        else:
+            # Create thick slices
+            create_thick_slices(slice_thickness,
+                                img_data,
+                                new_labels,
+                                weights_array)
 
         # Append the new subject to the dataset
         images.extend(img_data)
@@ -747,6 +919,26 @@ def load_subjects(subjects: list,
         weights.extend(weights_array)
 
     return images, labels, weights
+
+
+def create_thick_slices(slice_thickness,
+                        img_data: np.ndarray,
+                        labels: np.ndarray,
+                        weights: np.ndarray):
+    # Create an MRI slice window => (D, slice_thickness, H, W)
+    if slice_thickness > 1:
+        img_data = get_thick_slices(img_data,
+                                    slice_thickness)
+        img_data = img_data.transpose((0, 3, 1, 2))
+    else:
+        img_data = np.expand_dims(img_data, axis=1)
+
+    # Remove blank slices
+    img_data, img_labels, weights_array = remove_blank_slices(images=img_data,
+                                                              labels=labels,
+                                                              weights=weights)
+    # Return the results
+    return img_data, img_labels, weights_array
 
 
 def mni2coronal(img):
@@ -909,17 +1101,12 @@ def get_norm_transforms(mode: str = 'percentiles_&_zscore') -> (np.ndarray, np.n
     transforms_list = []
 
     if mode == 'percentiles_&_zscore':
-        # Append the RescaleIntensity and ZNormalization transforms
-        transforms_list.append(tio.RescaleIntensity(percentiles=(0.5, 99.5)))
-        transforms_list.append(tio.ZNormalization())
+        # Append the RescaleIntensity and Z-score Normalization transforms
+        transforms_list.append(tio.ZNormalization(masking_method=lambda x: x > 0))
+        transforms_list.append(tio.RescaleIntensity(out_min_max=(0, 255), percentiles=(1, 99)))
     elif mode == 'zscore':
-        transforms_list.append(tio.ZNormalization())
-    # elif mode == 'log_norm_&_zscore':
-    #     # Append the ZNormalization transform
-    #     transforms_list.append(tio.ZNormalization())
-    #     # Apply log transform on the image
-    #     # Note: TorchIO does not implement such a scaling mode
-    #     stacked_images = np.log(stacked_images + 1)
+        # Append Z-score Normalization
+        transforms_list.append(tio.ZNormalization(masking_method=lambda x: x > 0))
     else:
         return []
     return transforms_list
@@ -996,9 +1183,28 @@ def get_thick_slices(img_data,
                      slice_thickness: int = 3):
     """
     Creates a sliding window view into the volume with the given slice thickness.
+
+    Parameters
+    ----------
+    img_data : np.ndarray
+        3D array representing the volume of image data.
+
+    slice_thickness : int, optional
+        The thickness of each slice, by default 3. This determines how many slices
+        are combined to form each output slice.
+
+    Returns
+    -------
+    np.ndarray
+        A new view into the original volume with a sliding window applied.
+        Each window corresponds to a thick slice of the original data.
     """
-    # Pad on the slice index axis with slice_thickness // 2
+    # Pad the image data on the first dimension (slice axis) with half the slice thickness on each side.
+    # This ensures that the sliding window can produce thick slices that extend evenly around each original slice.
     img_data = np.pad(img_data, pad_width=((slice_thickness // 2, slice_thickness // 2), (0, 0), (0, 0)), mode="edge")
+
+    # Create a sliding window view of the padded image data.
+    # This view creates thick slices along the first dimension of the image data.
     return np.lib.stride_tricks.sliding_window_view(img_data, slice_thickness, axis=0)
 
 
