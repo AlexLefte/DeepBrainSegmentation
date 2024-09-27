@@ -7,7 +7,7 @@ def save_nifti(segmentation_volume, output_file, affine=None):
     # Create a NIfTI image object
     if affine is None:
         affine = np.eye(4)
-    nifti_img = nib.Nifti1Image(segmentation_volume.astype(np.int16), affine=affine)
+    nifti_img = nib.Nifti1Image(segmentation_volume, affine=affine)
 
     # Create the directory if it doesn't exist
     output_directory = os.path.dirname(output_file)

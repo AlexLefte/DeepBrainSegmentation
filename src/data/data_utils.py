@@ -7,6 +7,8 @@ import torch.utils.data
 import torchio as tio
 import nibabel.orientations as orientations
 from scipy.ndimage import affine_transform
+from scipy.ndimage import binary_opening
+from scipy.ndimage import binary_closing
 from numpy.linalg import inv
 import logging
 import random
@@ -92,7 +94,7 @@ def compute_weights(labels: np.ndarray,
     weights = get_weights_list(labels, weights_dict)
 
     # Return the dictionary
-    return weights
+    return weights, list(weights_dict.values())
 
 
 # def get_weights_list(labels: list,
@@ -141,13 +143,23 @@ def get_weights_list_from_mask(labels: torch.Tensor,
         Tensor of weights for each class.
     """
     # Initialize the class weights list with zeros
-    class_weights = [0] * num_classes
+    class_weights = np.zeros(num_classes)
+
+    # Flatten the labels and weights_mask for vectorized operations
+    labels_flat = labels.flatten()
+    weights_flat = weights_mask.flatten()
+
+    # Find unique classes in the labels and their first occurrence indices
+    unique_classes, indices = np.unique(labels_flat, return_index=True)
 
     # Assign the weight for each class, if present in labels
-    for class_idx in range(num_classes):
-        if class_idx in labels:
-            class_weights[class_idx] = weights_mask[labels == class_idx][0]
+    for class_idx in unique_classes:
+        if class_idx < num_classes:  # Ensure the class index is within the valid range
+            # Get the index of the first occurrence
+            first_occurrence_idx = indices[unique_classes == class_idx][0]
+            class_weights[class_idx] = weights_flat[first_occurrence_idx]
 
+    # Convert the weights list to a PyTorch tensor
     return torch.tensor(class_weights)
 
 
@@ -167,7 +179,7 @@ def compute_median_frequency_balanced_weights(class_weights: dict):
 
 
 def compute_non_linear_weights(class_weights: dict,
-                               r: float = 5):
+                               r: float = 1.5):
     """
     Computes non-linear weights for each class based on their frequencies.
 
@@ -200,13 +212,13 @@ def compute_non_linear_weights(class_weights: dict,
         else:
             class_weights[0] = 0.1
 
-    # Step 3: Normalize transformed weights to the range [0.6, 0.9].
+    # Step 3: Normalize transformed weights to the range [0.6, 0.8].
     min_transformed_weight = min(list(class_weights.values())[1:])
     max_transformed_weight = max(list(class_weights.values())[1:])
 
     for label, weight in class_weights.items():
         if label != 0:
-            class_weights[label] = 0.6 + 0.3 * ((class_weights[label] - min_transformed_weight) / (
+            class_weights[label] = 0.6 + 0.2 * ((class_weights[label] - min_transformed_weight) / (
                     max_transformed_weight - min_transformed_weight))
 
     x = np.linspace(min(class_freqs), max(class_freqs), 10000)  # 500 de puncte între 1 și 100
@@ -276,7 +288,8 @@ def normalize_weights(weights_list: np.ndarray,
 def lut2labels(labels: np.ndarray,
                lut_labels: list,
                right_left_map: dict,
-               plane: str, ) -> np.ndarray:
+               plane: str,
+               unilat: bool = False) -> np.ndarray:
     """
     Returns the labels in range: 0-78
     """
@@ -285,7 +298,7 @@ def lut2labels(labels: np.ndarray,
     mask = np.isin(labels, delat_structures)
     labels[mask] -= 1000
 
-    if plane == 'sagittal':
+    if unilat or plane == 'sagittal':
         # For sagittal map all right structures to the left
         for right, left in right_left_map.items():
             labels[labels == right] = left
@@ -704,7 +717,8 @@ def fix_orientation_and_voxel_size(img,
     labels, _ = reorient_resample_volume(labels, vox_size, out_shape, interpolation_order=0)
 
     # Change axis according to the desired plan
-    apply_plane_orientation([img, labels], plane)
+    img = apply_plane_orientation(img, plane)
+    labels = apply_plane_orientation(labels, plane)
 
     # Ensure image shapes coincide
     assert img.shape == labels.shape, "Image and labels shapes must be equal."
@@ -772,14 +786,14 @@ def reorient_resample_volume(volume: nib.Nifti1Image,
     return reoriented_volume, a
 
 
-def apply_plane_orientation(images: list, plane: str):
-    for i in range(len(images)):
-        if plane == 'axial':
-            images[i][:] = images[i].transpose((2, 1, 0))
-        elif plane == 'coronal':
-            images[i][:] = images[i].transpose((1, 2, 0))
-        elif plane == 'sagittal':
-            images[i][:] = images[i].transpose((0, 2, 1))
+def apply_plane_orientation(image, plane: str):
+    if plane == 'axial':
+        image = image.transpose((2, 1, 0))
+    elif plane == 'coronal':
+        image = image.transpose((1, 2, 0))
+    elif plane == 'sagittal':
+        image = image.transpose((0, 2, 1))
+    return image
 
 
 def fix_orientation_inference(img, plane):
@@ -794,11 +808,11 @@ def fix_orientation_inference(img, plane):
 
 def revert_fix_orientation_inference(img, plane):
     if plane == 'axial':
-        img = img.transpose((3, 1, 2, 0))
+        img = img.permute((3, 1, 2, 0))
     elif plane == 'coronal':
-        img = img.transpose((3, 1, 0, 2))
+        img = img.permute((3, 1, 0, 2))
     else:
-        img = img.transpose((0, 1, 3, 2))
+        img = img.permute((0, 1, 3, 2))
     return img
 
 
@@ -822,7 +836,8 @@ def load_subjects(subjects: list,
                   preprocessing_mode: str,
                   loss_function: str,
                   mode: str = '',
-                  save_hdf5: bool = False):
+                  save_hdf5: bool = False,
+                  unilateral_classes: bool = False):
     # Lists for images, labels, label weights, and zooms
     images = []
     labels = []
@@ -894,17 +909,18 @@ def load_subjects(subjects: list,
                                 plane=plane)
 
         # Compute class weights
-        weights_array = compute_weights(new_labels,
-                                        loss_function)
+        weights_array, weights_list = compute_weights(new_labels,
+                                                      loss_function)
         if save_hdf5:
             # Save the fused labels and weights as well
             fused_labels = lut2labels(labels=img_labels,
                                       lut_labels=lut_sag,
                                       right_left_map=right_left_dict,
-                                      plane=plane)
-            fused_weights = compute_weights(fused_labels,
-                                            loss_function)
-            return img_data, new_labels, weights_array, fused_labels, fused_weights
+                                      plane=plane,
+                                      unilat=unilateral_classes)
+            fused_weights, fused_weights_list = compute_weights(fused_labels,
+                                                                loss_function)
+            return img_data, new_labels, weights_array, fused_labels, fused_weights, weights_list, fused_weights_list
 
         else:
             # Create thick slices
@@ -1053,10 +1069,7 @@ def preprocess_subject(image: np.ndarray,
         - If data shape is below the standard size => pad
     2) Normalization:
     """
-    # 1) Crop or pad
-    # TODO
-
-    # Initialize a transformations list
+    # 1) Initialize a transformations list
     transforms_list = []
 
     # 2) Normalize
@@ -1206,8 +1219,6 @@ def get_thick_slices(img_data,
     # Create a sliding window view of the padded image data.
     # This view creates thick slices along the first dimension of the image data.
     return np.lib.stride_tricks.sliding_window_view(img_data, slice_thickness, axis=0)
-
-
 # endregion
 
 
@@ -1246,34 +1257,86 @@ def get_train_test_split(subjects: list,
 
 
 # region Post-processing
-def lateralize_volume(volume):
+def lateralize_volume(volume, subcort_right_left_map, unified_labels: True):
     """
-    Lateralize the volume
+    Lateralize the volume back to the original 95 class labels
     """
-    # Compute the centroids for the right&left white matter clusters
-    # 2	 Left-Cerebral-White-Matter
-    # 41 Right-Cerebral-White-Matter
-    left_wm_centroid = get_class_centroid(volume == 2)
-    right_wm_centroid = get_class_centroid(volume == 41)
+    if unified_labels:
+        # All symmetric labels are unified
+        # Identify the white matter mask
+        wm = volume == 2
 
-    # Create a list containing all left-hand cortical classes that have been merged before training
-    cortical_classes = [1003, 1006, 1007, 1008, 1009, 1011, 1015, 1018, 1019, 1020, 1021, 1025, 1026, 1027,
-                        1029, 1030, 1031, 1034, 1035]
+        # Define a structuring element and perform a binary opening
+        # to remove connections
+        structuring_element = np.ones((5, 5, 5), dtype=bool)
+        wm = binary_opening(wm, structure=structuring_element)
 
-    # For each label in turn map each pixel to the nearest centroid
+        # Use scikit-image to compute the region props
+        props = measure.regionprops(measure.label(wm, background=False, connectivity=2))
+        sorted_props = sorted(props, key=lambda x: x.area, reverse=True)
+        largest_centroids = [prop.centroid for prop in sorted_props[:2]]
+
+        # Determine which centroid is on the right and which
+        # one is on the left using the X coordinate
+        if largest_centroids[0][0] > largest_centroids[1][0]:
+            right_wm_centroid, left_wm_centroid = largest_centroids[0], largest_centroids[1]
+        else:
+            right_wm_centroid, left_wm_centroid = largest_centroids[1], largest_centroids[0]
+    else:
+        # Get left/right white matter centroids directly
+        left_wm_centroid = get_class_centroid(volume == 2)
+        right_wm_centroid = get_class_centroid(volume == 41)
+
+    if unified_labels:
+        # Remap the subcortical labels based on the distance towards the centroids
+        for right, left in subcort_right_left_map.items():
+            # Get left label mask
+            label_mask = volume == left
+
+            # Get the coordinates of the current label
+            coords = np.argwhere(label_mask)
+
+            # Calculate distances to centroids
+            left_distances = np.linalg.norm(coords - left_wm_centroid, axis=1)
+            right_distances = np.linalg.norm(coords - right_wm_centroid, axis=1)
+
+            # Determine which coordinates are closer to the right centroid
+            right_mask = right_distances < left_distances
+
+            # Update the volume according to the right_mask
+            right_coords = coords[right_mask]
+            for coord in right_coords:
+                volume[tuple(coord)] = right
+
+    # List of all left-hand cortical classes that have been merged before training
+    if unified_labels:
+        cortical_classes = [1002, 1003, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017,
+                            1018, 1019, 1020, 1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1034,
+                            1035]
+    else:
+        cortical_classes = [1003, 1006, 1007, 1008, 1009, 1011, 1015, 1018, 1019, 1020, 1026, 1027,
+                            1029, 1030, 1031, 1034, 1035]
+
+    # Map each pixel to the nearest centroid for each label
     for label in cortical_classes:
         # Create a mask for the current label
         label_mask = volume == label
 
-        # Calculate the distances between each pixel and left and right centroids
-        left_distances = np.linalg.norm(np.argwhere(label_mask) - left_wm_centroid, axis=1)
-        right_distances = np.linalg.norm(np.argwhere(label_mask) - right_wm_centroid, axis=1)
+        # Get the coordinates of the current label
+        coords = np.argwhere(label_mask)
 
-        # Determine the closest centroid for each pixel
+        # Calculate distances to centroids
+        left_distances = np.linalg.norm(coords - left_wm_centroid, axis=1)
+        right_distances = np.linalg.norm(coords - right_wm_centroid, axis=1)
+
+        # Determine which coordinates are closer to the right centroid
         right_mask = right_distances < left_distances
 
-        # Map the closest centroid to the pixels in the label mask
-        volume[right_mask] += 1000
+        # Update the volume: Add 1000 to the positions where right_distance is smaller
+        # Use the original coordinates filtered by right_mask
+        right_coords = coords[right_mask]
+        for coord in right_coords:
+            volume[tuple(coord)] += 1000
 
     return volume
 
