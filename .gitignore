@@ -1,4 +1,7 @@
-/dataset/subjects
 /docs/
 /experiments/
-/docs/
+/dataset/
+/docs/Papers/
+/src/utils/__pycache__/
+/src/models/__pycache__/
+/.idea/

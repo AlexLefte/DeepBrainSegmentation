@@ -12,8 +12,8 @@ from src.data import data_utils as du
 import h5py
 from src.utils.nifti import save_nifti
 
-ORIG = 't1weighted.MNI152.nii.gz'
-LABELS = 'labels.DKT31.manual+aseg.MNI152.nii.gz'
+ORIG = 't1weighted.nii.gz'
+LABELS = 'labels.DKT31.manual+aseg.nii.gz'
 LOGGER = logging.getLogger(__name__)
 
 
@@ -41,6 +41,12 @@ class SubjectsDataset(Dataset):
         # Get plane
         self.plane = cfg['plane']
 
+        # Get class fuse flag
+        self.unilateral_classes = cfg['unilateral_classes']
+
+        # Get class number
+        self.num_classes = cfg['num_classes']
+
         # Get image processing modality:
         self.processing_modality = cfg['preprocessing_modality']
 
@@ -65,18 +71,24 @@ class SubjectsDataset(Dataset):
                 self.images = []
                 self.labels = []
                 self.weights = []
+                self.weights_list = []
                 for subject_name, subject in hf.items():
                     if os.path.basename(subject_name) in self.subjects:
                         images = subject['images'][:]
-                        if self.plane == 'sagittal':
+                        if self.plane == 'sagittal' or self.unilateral_classes:
                             labels = subject['fused_labels'][:]
                             weights = subject['fused_weights'][:]
+                            weights_list = [subject['fused_weights_list'][:]] * weights.shape[0]
                         else:
                             labels = subject['labels'][:]
                             weights = subject['weights'][:]
+                            weights_list = [subject['weights_list'][:]] * weights.shape[0]
 
                         # Get the plane orientation
-                        du.apply_plane_orientation([images, labels, weights], self.plane)
+                        images = du.apply_plane_orientation(images, self.plane)
+                        labels = du.apply_plane_orientation(labels, self.plane)
+                        weights = du.apply_plane_orientation(weights, self.plane)
+                        # [images, labels, weights] = du.apply_plane_orientation([images, labels, weights], self.plane)
 
                         # Create thick slice
                         images, labels, weights = du.create_thick_slices(self.slice_thickness,
@@ -88,6 +100,7 @@ class SubjectsDataset(Dataset):
                         self.images.extend(images)
                         self.labels.extend(labels)
                         self.weights.extend(weights)
+                        self.weights_list.extend(weights_list)
         else:
             # Load the subjects directly
             self.images, self.labels, self.weights = du.load_subjects(self.subjects,
@@ -99,7 +112,8 @@ class SubjectsDataset(Dataset):
                                                                       self.right_left_dict,
                                                                       self.processing_modality,
                                                                       cfg['loss_function'],
-                                                                      mode)
+                                                                      mode,
+                                                                      self.unilateral_classes)
 
         # if self.mode == 'test':
         #     self.weights = []
@@ -131,7 +145,10 @@ class SubjectsDataset(Dataset):
         """
         # Apply transforms if they exist
         if self.transform is not None:
-            image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
+            image, labels, weights, weights_list = (self.images[idx],
+                                                    self.labels[idx],
+                                                    self.weights[idx],
+                                                    self.weights_list[idx])
             image = np.expand_dims(image, axis=3)
             labels = np.expand_dims(labels, axis=(0, 3))
             weights = np.expand_dims(weights, axis=(0, 3))
@@ -153,10 +170,15 @@ class SubjectsDataset(Dataset):
             weights = torch.squeeze(transform_result['weight'].data, dim=(0, -1))
         else:
             if self.mode == 'train' or self.mode == 'val':
-                image, labels, weights = self.images[idx], self.labels[idx], self.weights[idx]
+                image, labels, weights, weights_list = (self.images[idx],
+                                                        self.labels[idx],
+                                                        self.weights[idx],
+                                                        self.weights_list[idx])
             else:
-                image, labels, weights = self.images[idx], self.labels[idx], torch.tensor(
-                    np.ones_like(self.labels[idx]))
+                image, labels, weights, weights_list = (self.images[idx],
+                                                        self.labels[idx],
+                                                        torch.tensor(np.ones_like(self.labels[idx])),
+                                                        self.weights_list[idx])
             image = torch.Tensor(image)
             labels = torch.Tensor(labels)
 
@@ -168,7 +190,7 @@ class SubjectsDataset(Dataset):
             'image': image,
             'labels': labels,
             'weights': weights,
-            'weights_list': du.get_weights_list_from_mask(image, labels, self.num_classes)
+            'weights_list': weights_list
         }
 
 
@@ -212,14 +234,15 @@ class InferenceSubjectsDataset(Dataset):
                 continue
 
             # Compute the output shape
-            vox_sizes = cfg['vox_size']
-            output_shape = tuple(int(a * b / vox_sizes) for a, b in zip(self.initial_shape, zooms))
-
+            # self.initial_shape = (cfg['out_shape'],) * 3
+            # vox_sizes = cfg['vox_size']
+            # output_shape = tuple(int(a * b / vox_sizes) for a, b in zip(self.initial_shape, zooms))
+            output_shape = (cfg['out_shape'],) * 3
             img_data, affine = du.reorient_resample_volume(img, vox_zoom=1.0, output_shape=output_shape)
             self.affine = affine
 
             # Save the initial output shape of the volume
-            self.initial_shape = output_shape
+            # self.initial_shape = output_shape
 
             # Initialize a transformations list
             transforms_list = []
@@ -253,6 +276,9 @@ class InferenceSubjectsDataset(Dataset):
             else:
                 img_data = np.zeros_like(img_data)
             img_data = np.asarray(img_data, dtype=np.uint8)
+
+            # Save the reoriented MRI
+            save_nifti(img_data, os.path.join(cfg['output_path'], 'standard_image.nii'))
 
             # Change axis according to the desired plan
             if plane == 'axial':

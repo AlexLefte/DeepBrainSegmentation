@@ -41,10 +41,6 @@ class Metric(ABC):
         pass
 
 
-class AverageHausdorff:
-    pass
-
-
 class AccScore(Metric):
     """
     Stores the confusion matrix and computes the overall accuracy
@@ -276,7 +272,8 @@ def get_cortical_subcortical_class_dsc(y_pred: np.ndarray,
 
 def get_class_dsc(y_pred: np.ndarray,
                   y_true: np.ndarray,
-                  num_classes: int,
+                  num_classes: int = None,
+                  class_list: list = None,
                   return_mean: bool = True):
     """
     Returns the overall dice score
@@ -285,7 +282,10 @@ def get_class_dsc(y_pred: np.ndarray,
     intersect = []
     union = []
 
-    for i in range(num_classes):
+    if class_list is None:
+        class_list = list(range(num_classes))
+
+    for i in class_list:
         # Get all indexes where class 'i' is found
         labels_i = (y_true == i)
 
@@ -344,7 +344,8 @@ def get_cort_subcort_avg_hausdorff(y_pred: np.ndarray,
 
 def get_scores(y_pred: np.ndarray,
                y_true: np.ndarray,
-               num_classes: int) -> dict:
+               num_classes: int = None,
+               class_list: list = None) -> dict:
     """
     Computes the following evaluation scores: Dice, IoU, Precision, Recall, F1 score, Accuracy.
 
@@ -356,6 +357,8 @@ def get_scores(y_pred: np.ndarray,
         Array of ground truth class labels.
     num_classes : int
         Total number of classes.
+    class_list: list
+        Class list
 
     Returns
     -------
@@ -371,8 +374,11 @@ def get_scores(y_pred: np.ndarray,
     f1 = []
     acc = []
 
+    if class_list is None:
+        class_list = list(range(1, num_classes))
+
     # Compute scores for each class (excluding the background)
-    for i in range(1, num_classes):
+    for i in class_list:
         # Boolean arrays where true elements belong to class 'i'
         labels_i = (y_true == i)
         preds_i = (y_pred == i)

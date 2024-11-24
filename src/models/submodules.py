@@ -4,24 +4,23 @@ from torch import nn
 # Define the first Competitive Dense Block (CDB)
 class CompetitiveDenseBlock(nn.Module):
     """
-    Each block is composed of three sequences of parametric rectified linear unit (PReLU), convolution (Conv) and
-    normalization (BN) except for the very first encoder block. In the first block, the PReLU is replaced
-    with a BN to normalize the raw inputs.
-
-    Attributes
-    ---------
-    in_channels,
-    out_channels,
-    kernel_h & kernel_w,
-    filters,
-    padding_h & padding_w,
-    stride;
-
-    Methods
-    -------
-    forward
+    Each block consists of three sequences of parametric rectified linear unit (PReLU), convolution (Conv), and
+    batch normalization (BN) layers, except for the first encoder block. The first block replaces PReLU with
+    BN to normalize the raw inputs.
     """
     def __init__(self, params: dict, is_input=False, verbose=False):
+        """
+        Initializes the competitive dense block with the given parameters.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing the configuration parameters for the block.
+        is_input : bool, optional
+            Indicates if this is the first block, by default False.
+        verbose : bool, optional
+            If True, prints additional debug information, by default False.
+        """
         super().__init__()
 
         self.is_first = is_input
@@ -31,11 +30,10 @@ class CompetitiveDenseBlock(nn.Module):
         stride = params["conv_stride"]
         self.verbose = verbose
 
-        # It is important to use padding in order to
-        # ensure the output tensor has the same dimensions
+        # Use padding to ensure the output tensor retains the same dimensions
         padding = ((kernel - 1) // 2, (kernel - 1) // 2)
 
-        # Defining three distinct structures
+        # Defining four distinct sequences of layers
         self.seq1 = nn.Sequential(
             nn.BatchNorm2d(in_channels) if is_input else nn.PReLU(),
             nn.Conv2d(in_channels=in_channels,
@@ -78,19 +76,31 @@ class CompetitiveDenseBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
+        Performs a forward pass through the competitive dense block.
+
         Input CDB:
                                             | - - - - - - - - - - - - - - - |
                                            |                               v
-        Input -> (BN -> Conv(5x5) -> BN)  -> (PReLU -> Conv (5x5) -> BN) -> Maxout -> (PReLU -> Conv (1x1) -> BN)
+        Input -> (BN -> Conv(3x3) -> BN)  -> (PReLU -> Conv (5x5) -> BN) -> Maxout -> (PReLU -> Conv (3x3) -> BN)
 
         ----------------------------------------------------------------------------------------------------------
 
         Regular CDB:
-                                               | - - - - - - - - - - - - |
-                                              |                         v
-        Input -> (PReLU -> Conv(5x5) -> BN) -> Maxout -> (PReLU -> Conv (5x5) -> BN) -> Maxout -> (PReLU -> Conv (1x1) -> BN)
+                                               | - - - - - - - - - - - - - - - - - - -|
+                                              |                                       v
+        Input -> (PReLU -> Conv(3x3) -> BN) -> Maxout -> (PReLU -> Conv (3x3) -> BN) -> Maxout -> (PReLU -> Conv (3x3) -> BN)
               |                              ^
               | - - - - - - - - - - - - - - |
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            The input tensor to be processed.
+
+        Returns
+        -------
+        torch.Tensor
+            The output tensor after processing.
         """
         out1 = self.seq1(x) if self.is_first else torch.maximum(x, self.seq1(x))
         out2 = torch.maximum(out1, self.seq2(out1))
@@ -109,12 +119,19 @@ class CompetitiveDenseBlock(nn.Module):
 
 class EncodingCDB(CompetitiveDenseBlock):
     """
-    Encoding Competitive Dense Block = CompetitiveDenseBlock + Max Pooling
+    Encoding Competitive Dense Block extends CompetitiveDenseBlock by adding Max Pooling.
     """
 
     def __init__(self, params: dict, is_input=False):
         """
-        Constructor
+        Initializes the encoding competitive dense block.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing the configuration parameters.
+        is_input : bool, optional
+            Indicates if this block is the first in the encoding sequence, by default False.
         """
         kernel = params["pool_kernel"]
         stride = params["pool_stride"]
@@ -122,7 +139,8 @@ class EncodingCDB(CompetitiveDenseBlock):
         super(EncodingCDB, self).__init__(params=params,
                                           is_input=is_input)
 
-        # MaxPool2D: https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
+        # Define the MaxPool2D layer
+        # Reference: https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
         self.max_pool = nn.MaxPool2d(
             kernel_size=kernel,
             stride=stride,
@@ -131,13 +149,21 @@ class EncodingCDB(CompetitiveDenseBlock):
 
     def forward(self, x: torch.Tensor) -> (torch.Tensor, torch.Tensor, torch.Tensor):
         """
-        Forward method for the encoding CDB
+        Forward pass through the encoding block.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            The input tensor to be processed.
 
         Returns
         -------
-        1) output_tensor
-        2) output_block - maxpooled feature map
-        3) indices
+        torch.Tensor
+            The tensor after max pooling.
+        torch.Tensor
+            The feature map after the dense block.
+        torch.Tensor
+            Indices from max pooling for use in unpooling.
         """
         output_block = super(EncodingCDB, self).forward(x)
         output_encoder, indices = self.max_pool(output_block)
@@ -151,12 +177,16 @@ class EncodingCDB(CompetitiveDenseBlock):
 
 class DecodingCDB(CompetitiveDenseBlock):
     """
-    Decoding Competitive Block = Unpool2D + Skip Connection -> Dense Block
+    Decoding Competitive Dense Block adds Unpooling and Skip Connections to CompetitiveDenseBlock.
     """
-
     def __init__(self, params: dict):
         """
-        Constructor
+        Initializes the decoding competitive dense block.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing the configuration parameters.
         """
         super(DecodingCDB, self).__init__(params=params)
 
@@ -166,6 +196,20 @@ class DecodingCDB(CompetitiveDenseBlock):
     def forward(self, x: torch.Tensor, output_block: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
         """
         Forward pass
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            The input tensor from the previous layer.
+        output_block : torch.Tensor
+            The feature map from the corresponding encoding block.
+        indices : torch.Tensor
+            Indices from max pooling to be used for unpooling.
+
+        Returns
+        -------
+        torch.Tensor
+            The output tensor after unpooling and processing through the block.
         """
         max_unpool = nn.MaxUnpool2d(
             kernel_size=self.kernel,
@@ -185,12 +229,16 @@ class DecodingCDB(CompetitiveDenseBlock):
 
 class ClassifierBlock(nn.Module):
     """
-    The last block in our architecture
+    Defines the final classification block of the network.
     """
-
     def __init__(self, params: dict):
         """
-        Constructor
+        Initializes the classifier block.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary containing the configuration parameters.
         """
         super(ClassifierBlock, self).__init__()
 
@@ -199,12 +247,13 @@ class ClassifierBlock(nn.Module):
         kernel_size = params["classifier_kernel"]
         stride = params["conv_stride"]
 
+        # Initialize the final convolutional layer
         self.conv2d = nn.Conv2d(in_channels=in_channels,
                                 out_channels=num_classes,
                                 kernel_size=kernel_size,
                                 stride=stride)
 
-        self.softmax = nn.Softmax(dim=1)
+        # self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

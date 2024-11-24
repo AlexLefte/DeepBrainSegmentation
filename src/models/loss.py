@@ -119,37 +119,6 @@ class DiceLoss(nn.Module):
         return dice_per_channel.mean()
 
 
-# def dice_loss(y_true: Tensor,
-#               y_pred: Tensor,
-#               eps: float = 1e-5):
-#
-#     intersection = torch.sum(y_true * y_pred)
-#     union = torch.sum(y_true) + torch.sum(y_pred)
-#     return (2.0 * intersection + eps) / (union + eps)
-
-
-# Create your weighted cross-entropy loss function
-class WeightedCELoss(nn.Module):
-    """
-    Computes the weighted Cross-Entropy loss
-    """
-    def __init__(self):
-        """
-        Constructor
-        """
-        super(WeightedCELoss, self).__init__()
-
-    @staticmethod
-    def forward(self,
-                y_pred,
-                y_true,
-                weights):
-        ce = nn.functional.cross_entropy(input=y_pred,
-                                         target=y_true)
-        weighted_ce = torch.mean(torch.mul(ce, weights))
-        return weighted_ce
-
-
 class CombinedLoss(nn.Module):
     """
     Computes the result of a composite loss function:

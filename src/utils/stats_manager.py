@@ -128,10 +128,10 @@ class StatsManager:
         if mode == 'Val':
             dice_scores = get_class_dsc(y_pred_flat,
                                         y_true_flat,
-                                        self.num_classes,
+                                        num_classes=self.num_classes,
                                         return_mean=False)
             LOGGER.info(f"{mode} mode DSC results:")
-            for i in range(self.num_classes):
+            for i in range(len(dice_scores)):
                 LOGGER.info(f"Class {i} dice score: {dice_scores[i]}")
 
             # Compute all scores
@@ -146,7 +146,7 @@ class StatsManager:
         if epoch == self.epochs - 1:
             dice_scores = get_class_dsc(y_pred_flat,
                                         y_true_flat,
-                                        self.num_classes,
+                                        num_classes=self.num_classes,
                                         return_mean=False)
             LOGGER.info(f"{mode} mode DSC results:")
             for i in range(self.num_classes):
