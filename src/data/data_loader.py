@@ -1,5 +1,5 @@
 import torch.utils.data
-from src.data.dataset import *
+from data.dataset import *
 from torchvision import transforms
 import torchio as tio
 from torch.utils.data import DataLoader

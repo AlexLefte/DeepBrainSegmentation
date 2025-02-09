@@ -5,9 +5,9 @@ from data.data_loader import get_data_loaders
 from data.data_loader import get_data_loader
 
 from trainer import Trainer
-from src.models.fcnn_model import FCnnModel
-from src.models.loss import *
-from src.models.optimizer import get_optimizer
+from models.fcnn_model import FCnnModel
+from models.loss import *
+from models.optimizer import get_optimizer
 
 from utils import logger
 from utils.lr_scheduler import get_lr_scheduler
@@ -75,14 +75,7 @@ if __name__ == '__main__':
     parent_dir = os.path.dirname(current_dir)
 
     # Read and log the current configuration
-    cfg = json.load(open(parent_dir + '/config/config.json', 'r'))
-
-    # Log the current configuration
-    LOGGER = logging.getLogger(__name__)
-    LOGGER.info('====Configuration:===')
-    for key, param in cfg.items():
-        LOGGER.info(f'{key}: {param}')
-    LOGGER.info('=====================\n')
+    cfg = json.load(open(os.path.join(parent_dir,'config/config.json'), 'r'))
 
     # Data path
     BASE_PATH = cfg['base_path']
@@ -110,9 +103,9 @@ if __name__ == '__main__':
             EXPERIMENT = datetime.now().strftime("%m-%d-%y_%H-%M")
             cfg['exp_name'] = EXPERIMENT
 
-            # Log the current split
-            LOGGER.info('\n=====================')
-            LOGGER.info(f'Training on split: {i}')
+            # # Log the current split
+            # LOGGER.info('\n=====================')
+            # LOGGER.info(f'Training on split: {i}')
 
         # Create the data loaders
         train_loader = get_data_loader(cfg, train, 'train')
@@ -127,6 +120,13 @@ if __name__ == '__main__':
         LOG_PATH = os.path.join(BASE_PATH, cfg['log_path'].format(PLANE), EXPERIMENT + '.log')
         logger.create_logger(LOG_PATH)
 
+        # Log the current configuration
+        LOGGER = logging.getLogger(__name__)
+        LOGGER.info('====Configuration:===')
+        for key, param in cfg.items():
+            LOGGER.info(f'{key}: {param}')
+        LOGGER.info('=====================\n')
+
         # Set up the stats manager
         stats_manager = StatsManager(cfg)
 
@@ -137,8 +137,8 @@ if __name__ == '__main__':
         # torch.cuda.init()
 
         # Set up the device
-        # device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        device = 'cpu'
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # device = 'cpu'
         LOGGER.info(f'Device: {device}')
 
         # Initializing the model

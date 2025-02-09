@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor, nn
-import src.data.data_utils as du
+import data.data_utils as du
 import numpy as np
 
 from torch.nn.modules.loss import _Loss
@@ -279,7 +279,7 @@ class CategoricalFocalLoss(nn.Module):
                                              classes_num=c)
 
         # Compute the cross_entropy loss
-        ce = -y_true_encoded * torch.log(y_pred + self.eps)
+        ce = -y_true_encoded * torch.log2(y_pred + self.eps)
 
         if self.suppress_bkg:
             # Suppress the background loss component

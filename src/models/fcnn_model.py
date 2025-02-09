@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from src.models.submodules import *
+from models.submodules import *
 
 
 # Define the FCNN architecture

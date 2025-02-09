@@ -2,14 +2,14 @@ import numpy as np
 import torch.utils.data
 from torch.optim import lr_scheduler as lr_scheduler
 from torch.optim import Optimizer as Optimizer
-from src.models.fcnn_model import FCnnModel
+from models.fcnn_model import FCnnModel
 from tqdm import tqdm
 from time import time
-from src.utils.stats_manager import StatsManager
-from src.utils.checkpoint import *
-from src.utils.early_stopper import EarlyStopper
-from src.utils.nifti import save_nifti
-from src.data import data_utils as du
+from utils.stats_manager import StatsManager
+from utils.checkpoint import *
+from utils.early_stopper import EarlyStopper
+from utils.nifti import save_nifti
+from data import data_utils as du
 
 import logging
 

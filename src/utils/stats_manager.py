@@ -1,7 +1,7 @@
 import os
 from torch.utils.tensorboard import SummaryWriter
 import logging
-from src.utils.metrics import *
+from utils.metrics import *
 
 LOGGER = logging.getLogger(__name__)
 
